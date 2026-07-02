@@ -1,5 +1,5 @@
 "use strict";
-const { parseCSV, detectDelimiter, classifyValue, analyzeFile, crossFileChecks, buildMerge, toCSV } = require("./app.js");
+const { parseCSV, detectDelimiter, classifyValue, detectHasHeader, analyzeFile, crossFileChecks, buildMerge, toCSV } = require("./app.js");
 
 let passed = 0, failed = 0;
 function check(name, cond, extra) {
@@ -110,9 +110,48 @@ check("dup header renamed", dupH.headers.join("|") === "id|name|name (2)", dupH.
 const emptyH = analyzeFile("e.csv", "id,,x\n1,2,3\n", opts);
 check("empty header named", emptyH.headers[1] === "عمود_2", emptyH.headers);
 
-// numeric header warn
+// --- headerless detection
+check("detect header: text row", detectHasHeader(["الاسم", "البريد", "المدينة"]) === true);
+check("detect headerless: numbers", detectHasHeader(["1", "2", "3"]) === false);
+check("detect headerless: email", detectHasHeader(["أحمد", "ahmed@mail.com", "القاهرة"]) === false);
+check("detect headerless: date", detectHasHeader(["فاتورة", "2026-01-15"]) === false);
+
+// numeric first row → auto headerless, all rows are data
 const numH = analyzeFile("n.csv", "1,2,3\n4,5,6\n7,8,9\n", opts);
-check("numeric header warn", numH.issues.some((i) => i.message.includes("يبدو بيانات")), numH.issues.map((i) => i.message));
+check("numeric file auto headerless", numH.hasHeader === false, numH.hasHeader);
+check("headerless keeps all rows", numH.dataRows.length === 3, numH.dataRows.length);
+check("headerless info message", numH.issues.some((i) => i.message.includes("بدون صف عناوين")), numH.issues.map((i) => i.message));
+check("headerless positional headers", numH.headers.join("|") === "عمود_1|عمود_2|عمود_3", numH.headers);
+
+// manual override: force header on
+const forced = analyzeFile("n.csv", "1,2,3\n4,5,6\n7,8,9\n", opts, true);
+check("override forces header", forced.hasHeader === true && forced.dataRows.length === 2, forced);
+// manual override: force headerless off a text file
+const forcedOff = analyzeFile("t.csv", "a,b\nc,d\n", opts, false);
+check("override forces headerless", forcedOff.hasHeader === false && forcedOff.dataRows.length === 2, forcedOff);
+
+// all files headerless → positional merge, no header row in output
+const hl1 = analyzeFile("h1.csv", "أحمد,ahmed@mail.com,34\nسارة,sara@mail.com,28\n", opts);
+const hl2 = analyzeFile("h2.csv", "حسن,hassan@mail.com,38\n", opts);
+check("hl files detected headerless", hl1.hasHeader === false && hl2.hasHeader === false);
+const mHl = buildMerge([hl1, hl2], opts);
+check("all-headerless merge no header flag", mHl.includeHeader === false);
+check("all-headerless merge rows", mHl.rows.length === 3, mHl.rows);
+check("all-headerless no-header info", mHl.issues.some((i) => i.message.includes("لن يُضاف صف عناوين")), mHl.issues.map((i) => i.message));
+const csvHl = toCSV(null, mHl.rows, ",");
+check("toCSV without header row", csvHl.split("\r\n").length === 3 && csvHl.startsWith("أحمد,"), csvHl.split("\r\n")[0]);
+
+// mixed: named file + headerless file → positional alignment to output columns
+const mMix = buildMerge([a1, hl1], opts);
+check("mixed merge keeps header", mMix.includeHeader === true);
+check("mixed merge warn positional", mMix.issues.some((i) => i.message.includes("محاذاة أعمدته حسب الموقع")), mMix.issues.map((i) => i.message));
+const hlRow = mMix.rows.find((r) => r[1] === "ahmed@mail.com" && r[0] === "أحمد");
+check("mixed merge positional values", hlRow && hlRow[2] === "34" && hlRow[3] === "", hlRow);
+
+// all-headerless with different column counts → warn
+const hl3 = analyzeFile("h3.csv", "علي,ali@mail.com,40,إضافي\n", opts);
+const crossHl = crossFileChecks([hl1, hl3], opts);
+check("headerless col count mismatch warn", crossHl.some((i) => i.message.includes("عدد الأعمدة يختلف")), crossHl.map((i) => i.message));
 
 // empty file
 const ef = analyzeFile("empty.csv", "", opts);

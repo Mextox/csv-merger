@@ -80,9 +80,32 @@ function classifyValue(v) {
 
 const TYPE_NAMES = { number: "أرقام", date: "تواريخ", text: "نصوص" };
 
+// فاصل داخلي (U+001F) لبناء مفاتيح مقارنة الصفوف دون تصادم مع محتوى الخلايا
+const SEP = String.fromCharCode(31);
+
+/* ---------- اكتشاف وجود صف عناوين ---------- */
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// الصف الأول يُعتبر عناوين إلا إذا احتوى أرقامًا أو تواريخ أو بريدًا إلكترونيًا
+function detectHasHeader(firstRow) {
+  const cells = firstRow.map((c) => c.trim()).filter((c) => c !== "");
+  if (cells.length === 0) return true;
+  return !cells.some((c) => classifyValue(c) !== "text" || EMAIL_RE.test(c));
+}
+
+// عدد الأعمدة الأكثر شيوعًا بين الصفوف (للملفات بدون صف عناوين)
+function modeColumnCount(rows) {
+  const freq = new Map();
+  rows.forEach((r) => freq.set(r.length, (freq.get(r.length) || 0) + 1));
+  let best = 1, bestN = 0;
+  freq.forEach((n, len) => { if (n > bestN || (n === bestN && len > best)) { bestN = n; best = len; } });
+  return best;
+}
+
 /* ---------- تحليل ملف واحد ---------- */
 
-function analyzeFile(name, text, opts) {
+function analyzeFile(name, text, opts, hasHeaderOverride) {
   const issues = [];
   const delimiter = detectDelimiter(text);
   const { rows: rawRows, unclosedQuote } = parseCSV(text, delimiter);
@@ -92,41 +115,54 @@ function analyzeFile(name, text, opts) {
   }
   if (rawRows.length === 0 || rawRows.every((r) => r.every((c) => c.trim() === ""))) {
     issues.push({ severity: "error", file: name, message: `الملف "${name}" فارغ تمامًا — سيتم تجاهله في الدمج.` });
-    return { name, delimiter, headers: [], dataRows: [], issues, empty: true };
+    return { name, delimiter, headers: [], dataRows: [], issues, empty: true, hasHeader: true };
   }
 
-  // العناوين: أول صف غير فارغ
+  // أول صف غير فارغ
   let headerIdx = 0;
   while (headerIdx < rawRows.length && rawRows[headerIdx].every((c) => c.trim() === "")) headerIdx++;
-  const rawHeaders = rawRows[headerIdx];
+
+  // هل يوجد صف عناوين؟ (اكتشاف تلقائي مع إمكانية التحكم اليدوي لكل ملف)
+  const headerDetected = detectHasHeader(rawRows[headerIdx]);
+  const hasHeader = hasHeaderOverride == null ? headerDetected : hasHeaderOverride;
+
   const headers = [];
-  const seen = new Map();
+  let rawHeaders = null;
+  let dataStart;
 
-  rawHeaders.forEach((h, i) => {
-    let clean = h.trim();
-    if (clean !== h && clean !== "") {
-      issues.push({ severity: "info", file: name, message: `عنوان العمود "${clean}" في "${name}" يحتوي مسافات زائدة في بدايته أو نهايته — تم تنظيفه تلقائيًا.` });
+  if (hasHeader) {
+    rawHeaders = rawRows[headerIdx];
+    dataStart = headerIdx + 1;
+    const seen = new Map();
+    rawHeaders.forEach((h, i) => {
+      let clean = h.trim();
+      if (clean !== h && clean !== "") {
+        issues.push({ severity: "info", file: name, message: `عنوان العمود "${clean}" في "${name}" يحتوي مسافات زائدة في بدايته أو نهايته — تم تنظيفه تلقائيًا.` });
+      }
+      if (clean === "") {
+        clean = `عمود_${i + 1}`;
+        issues.push({ severity: "warn", file: name, message: `عمود بدون عنوان في "${name}" (العمود رقم ${i + 1}) — سُمّي "${clean}" تلقائيًا.` });
+      }
+      const key = clean;
+      if (seen.has(key)) {
+        const n2 = seen.get(key) + 1;
+        seen.set(key, n2);
+        issues.push({ severity: "warn", file: name, message: `اسم العمود "${clean}" مكرر في "${name}" — أُعيدت تسمية النسخة الثانية إلى "${clean} (${n2})".` });
+        clean = `${clean} (${n2})`;
+      } else {
+        seen.set(key, 1);
+      }
+      headers.push(clean);
+    });
+  } else {
+    // ملف بدون صف عناوين: كل الصفوف بيانات، والأعمدة تُعرَّف بموقعها
+    dataStart = headerIdx;
+    const contentRows = rawRows.slice(headerIdx).filter((r) => r.some((c) => c.trim() !== ""));
+    const colCount = modeColumnCount(contentRows);
+    for (let i = 0; i < colCount; i++) headers.push(`عمود_${i + 1}`);
+    if (hasHeaderOverride == null) {
+      issues.push({ severity: "info", file: name, message: `الملف "${name}" بدون صف عناوين (اكتُشف تلقائيًا لأن الصف الأول يبدو بيانات) — كل صفوفه ستُعامل كبيانات، ويمكنك تغيير ذلك من بطاقة الملف.` });
     }
-    if (clean === "") {
-      clean = `عمود_${i + 1}`;
-      issues.push({ severity: "warn", file: name, message: `عمود بدون عنوان في "${name}" (العمود رقم ${i + 1}) — سُمّي "${clean}" تلقائيًا.` });
-    }
-    const key = clean;
-    if (seen.has(key)) {
-      const n2 = seen.get(key) + 1;
-      seen.set(key, n2);
-      issues.push({ severity: "warn", file: name, message: `اسم العمود "${clean}" مكرر في "${name}" — أُعيدت تسمية النسخة الثانية إلى "${clean} (${n2})".` });
-      clean = `${clean} (${n2})`;
-    } else {
-      seen.set(key, 1);
-    }
-    headers.push(clean);
-  });
-
-  // هل الصف الأول بيانات وليس عناوين؟
-  const headerCells = rawHeaders.map((h) => h.trim()).filter((h) => h !== "");
-  if (headerCells.length > 0 && headerCells.every((h) => classifyValue(h) === "number")) {
-    issues.push({ severity: "warn", file: name, message: `الصف الأول في "${name}" يبدو بياناتٍ وليس عناوين (كل قيمه أرقام) — تأكد من وجود صف عناوين في الملف.` });
   }
 
   // صفوف البيانات
@@ -135,14 +171,14 @@ function analyzeFile(name, text, opts) {
   const raggedRows = [];
   const repeatedHeaderRows = [];
 
-  for (let r = headerIdx + 1; r < rawRows.length; r++) {
+  for (let r = dataStart; r < rawRows.length; r++) {
     const row = rawRows[r];
-    const lineNo = r + 1; // رقم الصف كما يراه المستخدم (1 = العناوين)
+    const lineNo = r + 1; // رقم الصف كما يراه المستخدم في الملف الأصلي
     const isEmpty = row.every((c) => c.trim() === "");
     if (isEmpty) { emptyRowCount++; if (!opts.skipEmpty) dataRows.push(new Array(headers.length).fill("")); continue; }
 
     // صف عناوين مكرر داخل البيانات → غالبًا جدول إضافي مدموج في نفس الملف
-    if (row.length === rawHeaders.length && row.every((c, i) => c.trim() === rawHeaders[i].trim())) {
+    if (hasHeader && row.length === rawHeaders.length && row.every((c, i) => c.trim() === rawHeaders[i].trim())) {
       repeatedHeaderRows.push(lineNo);
       continue;
     }
@@ -205,7 +241,7 @@ function analyzeFile(name, text, opts) {
   const rowKeys = new Map();
   let dupInFile = 0;
   dataRows.forEach((row) => {
-    const key = row.join("");
+    const key = row.join(SEP);
     if (row.every((c) => c.trim() === "")) return;
     rowKeys.set(key, (rowKeys.get(key) || 0) + 1);
   });
@@ -217,7 +253,7 @@ function analyzeFile(name, text, opts) {
     });
   }
 
-  return { name, delimiter, headers, dataRows, issues, empty: false, rowCount: dataRows.length };
+  return { name, delimiter, headers, dataRows, issues, empty: false, rowCount: dataRows.length, hasHeader };
 }
 
 /* ---------- الفحوصات بين الملفات ---------- */
@@ -232,11 +268,23 @@ function crossFileChecks(files, opts) {
   if (usable.length < 2) return issues;
 
   const ci = opts.caseInsensitive;
+  const named = usable.filter((f) => f.hasHeader);
 
-  // أعمدة متطابقة باختلاف حالة الأحرف فقط
-  if (!ci) {
+  // كل الملفات بدون صف عناوين: قارن عدد الأعمدة فقط
+  if (named.length === 0) {
+    const counts = new Set(usable.map((f) => f.headers.length));
+    if (counts.size > 1) {
+      issues.push({
+        severity: "warn", file: null,
+        message: `عدد الأعمدة يختلف بين الملفات (${[...counts].join("، ")}) رغم أنها كلها بدون صف عناوين — تأكد أن الملفات من نفس البنية قبل الدمج.`,
+      });
+    }
+  }
+
+  // أعمدة متطابقة باختلاف حالة الأحرف فقط (بين الملفات ذات العناوين)
+  if (!ci && named.length >= 2) {
     const variants = new Map();
-    usable.forEach((f) => f.headers.forEach((h) => {
+    named.forEach((f) => f.headers.forEach((h) => {
       const key = h.toLowerCase();
       if (!variants.has(key)) variants.set(key, new Set());
       variants.get(key).add(h);
@@ -251,9 +299,9 @@ function crossFileChecks(files, opts) {
     });
   }
 
-  // مقارنة مجموعات الأعمدة: أعمدة إضافية أو ناقصة بين الملفات
+  // مقارنة مجموعات الأعمدة: أعمدة إضافية أو ناقصة بين الملفات ذات العناوين
   const allCols = new Map(); // normalized → { display, files: Set }
-  usable.forEach((f) => f.headers.forEach((h) => {
+  named.forEach((f) => f.headers.forEach((h) => {
     const key = normalizeHeader(h, ci);
     if (!allCols.has(key)) allCols.set(key, { display: h, files: new Set() });
     allCols.get(key).files.add(f.name);
@@ -261,10 +309,10 @@ function crossFileChecks(files, opts) {
 
   let schemaMismatch = false;
   allCols.forEach((col) => {
-    if (col.files.size < usable.length) {
+    if (named.length >= 2 && col.files.size < named.length) {
       schemaMismatch = true;
       const inFiles = [...col.files];
-      const missingFrom = usable.map((f) => f.name).filter((n) => !col.files.has(n));
+      const missingFrom = named.map((f) => f.name).filter((n) => !col.files.has(n));
       if (inFiles.length === 1) {
         issues.push({
           severity: "warn", file: null,
@@ -280,9 +328,9 @@ function crossFileChecks(files, opts) {
   });
 
   // نفس الأعمدة لكن بترتيب مختلف
-  if (!schemaMismatch) {
-    const ref = usable[0].headers.map((h) => normalizeHeader(h, ci)).join("");
-    const orderDiffers = usable.some((f) => f.headers.map((h) => normalizeHeader(h, ci)).join("") !== ref);
+  if (!schemaMismatch && named.length >= 2) {
+    const ref = named[0].headers.map((h) => normalizeHeader(h, ci)).join(SEP);
+    const orderDiffers = named.some((f) => f.headers.map((h) => normalizeHeader(h, ci)).join(SEP) !== ref);
     if (orderDiffers) {
       issues.push({
         severity: "info", file: null,
@@ -305,32 +353,71 @@ function crossFileChecks(files, opts) {
 
 /* ---------- الدمج ---------- */
 
+const POS_PREFIX = " pos_"; // مفتاح خاص للأعمدة الموضعية حتى لا يتصادم مع أسماء أعمدة حقيقية
+
 function buildMerge(files, opts) {
   const usable = files.filter((f) => !f.empty);
   const ci = opts.caseInsensitive;
   const issues = [];
+  const named = usable.filter((f) => f.hasHeader);
+  const headerless = usable.filter((f) => !f.hasHeader);
+  const includeHeader = named.length > 0;
 
-  // بناء قائمة الأعمدة النهائية
-  const colOrder = []; // normalized keys
-  const colDisplay = new Map();
-  usable.forEach((f) => f.headers.forEach((h) => {
-    const key = normalizeHeader(h, ci);
-    if (!colDisplay.has(key)) { colDisplay.set(key, h.trim()); colOrder.push(key); }
-  }));
+  let finalCols = []; // مفاتيح: أسماء مطبَّعة أو مفاتيح موضعية
+  let headers = [];   // أسماء العرض
 
-  let finalCols = colOrder;
-  if (opts.columnMode === "intersection" && usable.length > 1) {
-    finalCols = colOrder.filter((key) =>
-      usable.every((f) => f.headers.some((h) => normalizeHeader(h, ci) === key))
-    );
-    if (finalCols.length === 0) {
-      issues.push({ severity: "error", file: null, message: "لا توجد أعمدة مشتركة بين كل الملفات — لا يمكن الدمج بوضع الأعمدة المشتركة. جرّب وضع اتحاد كل الأعمدة." });
-      return { headers: [], rows: [], issues, droppedDupes: 0, crossDupes: 0 };
+  if (named.length > 0) {
+    // الأعمدة تُبنى من الملفات ذات العناوين
+    const colOrder = [];
+    const colDisplay = new Map();
+    named.forEach((f) => f.headers.forEach((h) => {
+      const key = normalizeHeader(h, ci);
+      if (!colDisplay.has(key)) { colDisplay.set(key, h.trim()); colOrder.push(key); }
+    }));
+
+    finalCols = colOrder;
+    if (opts.columnMode === "intersection" && named.length > 1) {
+      finalCols = colOrder.filter((key) =>
+        named.every((f) => f.headers.some((h) => normalizeHeader(h, ci) === key))
+      );
+      if (finalCols.length === 0) {
+        issues.push({ severity: "error", file: null, message: "لا توجد أعمدة مشتركة بين كل الملفات — لا يمكن الدمج بوضع الأعمدة المشتركة. جرّب وضع اتحاد كل الأعمدة." });
+        return { headers: [], rows: [], issues, droppedDupes: 0, crossDupes: 0, includeHeader };
+      }
     }
+    headers = finalCols.map((key) => colDisplay.get(key));
+
+    // ملفات بدون عناوين وسط ملفات ذات عناوين: محاذاة موضعية + أعمدة إضافية عند الحاجة
+    if (headerless.length > 0) {
+      if (opts.columnMode === "union") {
+        const maxHl = Math.max(...headerless.map((f) => f.headers.length));
+        while (finalCols.length < maxHl) {
+          headers.push(`عمود_${finalCols.length + 1}`);
+          finalCols.push(POS_PREFIX + finalCols.length);
+        }
+      }
+      headerless.forEach((f) => {
+        issues.push({
+          severity: "warn", file: f.name,
+          message: `الملف "${f.name}" بدون صف عناوين — تمت محاذاة أعمدته حسب الموقع مع ترتيب أعمدة الناتج. تأكد من أن ترتيب أعمدته يطابق بقية الملفات.`,
+        });
+      });
+    }
+  } else if (usable.length > 0) {
+    // كل الملفات بدون صف عناوين: محاذاة موضعية بالكامل وبدون صف عناوين في الناتج
+    const counts = usable.map((f) => f.headers.length);
+    const colCount = opts.columnMode === "intersection" ? Math.min(...counts) : Math.max(...counts);
+    for (let i = 0; i < colCount; i++) {
+      finalCols.push(POS_PREFIX + i);
+      headers.push(`عمود ${i + 1}`);
+    }
+    issues.push({
+      severity: "info", file: null,
+      message: "كل الملفات بدون صف عناوين — سيتم الدمج بمحاذاة الأعمدة حسب موقعها، ولن يُضاف صف عناوين إلى الملف الناتج.",
+    });
   }
 
   const SOURCE_COL = "الملف المصدر";
-  const headers = finalCols.map((key) => colDisplay.get(key));
   if (opts.addSource) headers.push(SOURCE_COL);
 
   // تجميع الصفوف
@@ -341,16 +428,21 @@ function buildMerge(files, opts) {
 
   usable.forEach((f) => {
     const idxOf = new Map();
-    f.headers.forEach((h, i) => {
-      const key = normalizeHeader(h, ci);
-      if (!idxOf.has(key)) idxOf.set(key, i);
-    });
+    if (f.hasHeader) {
+      f.headers.forEach((h, i) => {
+        const key = normalizeHeader(h, ci);
+        if (!idxOf.has(key)) idxOf.set(key, i);
+      });
+    }
     f.dataRows.forEach((raw) => {
-      const out = finalCols.map((key) => {
-        const i = idxOf.get(key);
+      const out = finalCols.map((key, pos) => {
+        let i;
+        if (!f.hasHeader) i = pos;                          // ملف بدون عناوين: محاذاة بالموقع
+        else if (key.startsWith(POS_PREFIX)) i = undefined; // عمود موضعي لا يخص الملفات ذات العناوين
+        else i = idxOf.get(key);
         return i == null ? "" : (raw[i] == null ? "" : raw[i]);
       });
-      const dataKey = out.join("");
+      const dataKey = out.join(SEP);
       const prevSource = seenKeys.get(dataKey);
       if (prevSource !== undefined) {
         if (prevSource !== f.name) crossDupes++;
@@ -377,7 +469,7 @@ function buildMerge(files, opts) {
     }
   }
 
-  return { headers, rows, issues, droppedDupes, crossDupes };
+  return { headers, rows, issues, droppedDupes, crossDupes, includeHeader };
 }
 
 /* ---------- توليد CSV ---------- */
@@ -390,8 +482,10 @@ function csvEscape(value, delimiter) {
   return v;
 }
 
+// مرِّر null بدل headers لإنتاج CSV بدون صف عناوين
 function toCSV(headers, rows, delimiter) {
-  const lines = [headers.map((h) => csvEscape(h, delimiter)).join(delimiter)];
+  const lines = [];
+  if (headers && headers.length > 0) lines.push(headers.map((h) => csvEscape(h, delimiter)).join(delimiter));
   rows.forEach((r) => lines.push(r.map((c) => csvEscape(c, delimiter)).join(delimiter)));
   return lines.join("\r\n");
 }
@@ -425,7 +519,7 @@ async function readFileSmart(file) {
 if (typeof document !== "undefined") {
   const $ = (id) => document.getElementById(id);
 
-  const state = { files: [] }; // { name, size, text, encodingNote }
+  const state = { files: [] }; // { name, size, text, hasHeaderOverride, encodingNote }
 
   const dropzone = $("dropzone");
   const fileInput = $("fileInput");
@@ -459,6 +553,7 @@ if (typeof document !== "undefined") {
         name: f.name,
         size: f.size,
         text,
+        hasHeaderOverride: null, // null = اكتشاف تلقائي
         encodingNote: fallback
           ? { severity: "info", file: f.name, message: `الملف "${f.name}" ليس بترميز UTF-8 — تم اكتشاف ترميز ${encoding} وتحويله تلقائيًا حتى لا تظهر الحروف العربية مشوهة.` }
           : null,
@@ -488,7 +583,7 @@ if (typeof document !== "undefined") {
 
     // تحليل كل ملف
     const analyzed = state.files.map((f) => {
-      const a = analyzeFile(f.name, f.text, opts);
+      const a = analyzeFile(f.name, f.text, opts, f.hasHeaderOverride);
       if (f.encodingNote) a.issues.push(f.encodingNote);
       a.size = f.size;
       return a;
@@ -555,6 +650,18 @@ if (typeof document !== "undefined") {
 
       card.appendChild(icon);
       card.appendChild(info);
+      if (!a.empty) {
+        const hdrToggle = document.createElement("label");
+        hdrToggle.className = "hdr-toggle";
+        hdrToggle.title = "هل الصف الأول في هذا الملف صف عناوين؟ يُكتشف تلقائيًا ويمكنك تصحيحه هنا";
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = a.hasHeader;
+        cb.addEventListener("change", () => { state.files[idx].hasHeaderOverride = cb.checked; render(); });
+        hdrToggle.appendChild(cb);
+        hdrToggle.appendChild(document.createTextNode(" الصف الأول عناوين"));
+        card.appendChild(hdrToggle);
+      }
       card.appendChild(flags);
       card.appendChild(rm);
       list.appendChild(card);
@@ -615,6 +722,7 @@ if (typeof document !== "undefined") {
       merge.headers.forEach((h) => {
         const th = document.createElement("th");
         th.textContent = h;
+        if (!merge.includeHeader) th.className = "th-generic";
         trh.appendChild(th);
       });
       thead.appendChild(trh);
@@ -633,9 +741,14 @@ if (typeof document !== "undefined") {
       });
       table.appendChild(tbody);
     }
-    $("previewNote").textContent = merge.rows.length > PREVIEW_LIMIT
-      ? `معاينة أول ${PREVIEW_LIMIT} صف من أصل ${merge.rows.length} — الملف المنزَّل يحتوي كل الصفوف.`
-      : "";
+    const notes = [];
+    if (!merge.includeHeader && merge.rows.length > 0) {
+      notes.push("الملفات بدون صف عناوين — أسماء الأعمدة في المعاينة للعرض فقط ولن تُكتب في الملف الناتج.");
+    }
+    if (merge.rows.length > PREVIEW_LIMIT) {
+      notes.push(`معاينة أول ${PREVIEW_LIMIT} صف من أصل ${merge.rows.length} — الملف المنزَّل يحتوي كل الصفوف.`);
+    }
+    $("previewNote").textContent = notes.join(" ");
     $("downloadBtn").disabled = merge.rows.length === 0 && merge.headers.length === 0;
   }
 
@@ -643,7 +756,8 @@ if (typeof document !== "undefined") {
 
   function download() {
     if (!lastMerge) return;
-    const csv = toCSV(lastMerge.headers, lastMerge.rows, ",");
+    // إن كانت كل الملفات بدون صف عناوين فلا يُكتب صف عناوين في الناتج
+    const csv = toCSV(lastMerge.includeHeader ? lastMerge.headers : null, lastMerge.rows, ",");
     // BOM حتى يفتح Excel الملف بالحروف العربية الصحيحة
     const blob = new Blob([String.fromCharCode(0xFEFF) + csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -678,9 +792,16 @@ if (typeof document !== "undefined") {
       "yousef@mail.com,يوسف ماهر,45,مسقط,0561112223\n" +
       "sara@mail.com,سارة محمد,28,جدة,0574445556\n";
 
+    // ملف بدون صف عناوين — بنفس ترتيب أعمدة الملف الأول
+    const demo3 =
+      "سامي رشيد,sami@mail.com,تونس,33\n" +
+      "هدى عزيز,huda@mail.com,الرباط,30\n" +
+      "كمال نبيل,kamal@mail.com,الجزائر,37\n";
+
     state.files = [
-      { name: "عملاء-الفرع-الأول.csv", size: new Blob([demo1]).size, text: demo1, encodingNote: null },
-      { name: "عملاء-الفرع-الثاني.csv", size: new Blob([demo2]).size, text: demo2, encodingNote: null },
+      { name: "عملاء-الفرع-الأول.csv", size: new Blob([demo1]).size, text: demo1, encodingNote: null, hasHeaderOverride: null },
+      { name: "عملاء-الفرع-الثاني.csv", size: new Blob([demo2]).size, text: demo2, encodingNote: null, hasHeaderOverride: null },
+      { name: "عملاء-بدون-عناوين.csv", size: new Blob([demo3]).size, text: demo3, encodingNote: null, hasHeaderOverride: null },
     ];
     render();
     $("issuesSection").scrollIntoView({ behavior: "smooth" });
@@ -712,5 +833,5 @@ if (typeof document !== "undefined") {
 
 /* تصدير للاختبار في Node — لا تأثير له داخل المتصفح */
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseCSV, detectDelimiter, classifyValue, analyzeFile, crossFileChecks, buildMerge, toCSV, csvEscape };
+  module.exports = { parseCSV, detectDelimiter, classifyValue, detectHasHeader, analyzeFile, crossFileChecks, buildMerge, toCSV, csvEscape };
 }

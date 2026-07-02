@@ -159,6 +159,16 @@ body {
   border-radius: 8px;
 }
 .file-remove:hover { background: var(--error-bg); color: var(--error); }
+.hdr-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: .82rem;
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.hdr-toggle input { width: 15px; height: 15px; accent-color: var(--primary); cursor: pointer; }
 
 /* ===== الخيارات ===== */
 .options-grid {
@@ -240,6 +250,7 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+#previewTable th.th-generic { color: var(--muted); font-style: italic; font-weight: 500; }
 #previewTable tr:nth-child(even) td { background: #fafbfc; }
 #previewTable td.empty-cell { color: #cbd5e1; font-style: italic; }
 .preview-note { color: var(--muted); font-size: .85rem; margin: 10px 0 0; }
