@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>دمج ملفات CSV — أداة احترافية بدون تخزين</title>
+<meta name="description" content="أداة احترافية لدمج ملفات CSV داخل المتصفح مع فحص التناقضات والأخطاء الشائعة — لا يُرفع أو يُخزَّن أي شيء.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧩</text></svg>">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="container topbar-inner">
+    <div class="brand">
+      <span class="brand-icon">🧩</span>
+      <div>
+        <h1>دمج ملفات CSV</h1>
+        <p class="tagline">ادمج عدة ملفات في ملف واحد مع فحص ذكي للتناقضات والأخطاء الشائعة</p>
+      </div>
+    </div>
+    <div class="privacy-pill" title="كل المعالجة تتم محليًا عبر JavaScript داخل متصفحك">
+      🔒 يعمل بالكامل داخل متصفحك — لا يُرفع أو يُخزَّن أي ملف
+    </div>
+  </div>
+</header>
+
+<main class="container">
+
+  <!-- منطقة الإفلات -->
+  <section id="dropzone" class="dropzone" tabindex="0" role="button" aria-label="اختر أو أسقط ملفات CSV">
+    <div class="dz-icon">📂</div>
+    <p class="dz-title">اسحب ملفات CSV وأفلتها هنا</p>
+    <p class="dz-sub">أو</p>
+    <div class="dz-actions">
+      <button type="button" id="pickBtn" class="btn btn-primary">اختر الملفات</button>
+      <button type="button" id="demoBtn" class="btn btn-ghost">جرّب بملفات تجريبية</button>
+    </div>
+    <input type="file" id="fileInput" accept=".csv,text/csv,text/plain" multiple hidden>
+  </section>
+
+  <!-- قائمة الملفات -->
+  <section id="filesSection" class="card" hidden>
+    <div class="card-head">
+      <h2>الملفات <span id="filesCount" class="count-badge"></span></h2>
+      <button type="button" id="clearBtn" class="btn btn-ghost btn-sm">🗑 مسح الكل</button>
+    </div>
+    <div id="filesList" class="files-list"></div>
+  </section>
+
+  <!-- خيارات الدمج -->
+  <section id="optionsSection" class="card" hidden>
+    <div class="card-head"><h2>خيارات الدمج</h2></div>
+    <div class="options-grid">
+      <label class="opt">
+        <span class="opt-label">الأعمدة في الناتج</span>
+        <select id="optColumnMode">
+          <option value="union" selected>اتحاد كل الأعمدة (موصى به)</option>
+          <option value="intersection">الأعمدة المشتركة فقط</option>
+        </select>
+      </label>
+      <label class="opt opt-check"><input type="checkbox" id="optSkipEmpty" checked> تجاهل الصفوف الفارغة</label>
+      <label class="opt opt-check"><input type="checkbox" id="optDropDupes"> إزالة الصفوف المكررة</label>
+      <label class="opt opt-check"><input type="checkbox" id="optCaseInsensitive"> تجاهل حالة الأحرف في أسماء الأعمدة</label>
+      <label class="opt opt-check"><input type="checkbox" id="optAddSource"> إضافة عمود باسم الملف المصدر</label>
+    </div>
+  </section>
+
+  <!-- الفحوصات -->
+  <section id="issuesSection" class="card" hidden>
+    <div class="card-head">
+      <h2>نتائج الفحص <span id="issuesCount" class="count-badge"></span></h2>
+    </div>
+    <p id="issuesClean" class="clean-note" hidden>✅ لم يتم العثور على أي مشاكل — الملفات متسقة وجاهزة للدمج.</p>
+    <ul id="issuesList" class="issues-list"></ul>
+  </section>
+
+  <!-- النتيجة -->
+  <section id="resultSection" class="card" hidden>
+    <div class="card-head">
+      <h2>الناتج المدموج</h2>
+      <button type="button" id="downloadBtn" class="btn btn-primary">⬇ تنزيل CSV المدموج</button>
+    </div>
+    <div id="resultStats" class="stats-row"></div>
+    <div class="table-wrap">
+      <table id="previewTable"></table>
+    </div>
+    <p id="previewNote" class="preview-note"></p>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <div class="container">
+    <p>🔒 خصوصية كاملة: تتم كل المعالجة محليًا داخل متصفحك ولا يغادر أي ملف جهازك.</p>
+    <p><a href="https://github.com/Mextox/csv-merger" target="_blank" rel="noopener">المشروع مفتوح المصدر على GitHub</a> · رخصة MIT</p>
+  </div>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
