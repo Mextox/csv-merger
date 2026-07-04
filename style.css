@@ -89,7 +89,6 @@ body {
 .btn:active { transform: scale(.97); }
 .btn-primary { background: var(--primary); color: #fff; }
 .btn-primary:hover { background: var(--primary-hover); }
-.btn-primary:disabled { background: #a5b4fc; cursor: not-allowed; }
 .btn-ghost {
   background: transparent;
   color: var(--primary);
@@ -131,6 +130,7 @@ body {
   align-items: center;
   gap: 14px;
   border: 1px solid var(--border);
+  border-inline-start: 5px solid var(--file-color, var(--border)); /* شريط جانبي بلون الملف */
   border-radius: 10px;
   padding: 12px 16px;
   flex-wrap: wrap;
@@ -254,6 +254,39 @@ body {
 #previewTable tr:nth-child(even) td { background: #fafbfc; }
 #previewTable td.empty-cell { color: #cbd5e1; font-style: italic; }
 .preview-note { color: var(--muted); font-size: .85rem; margin: 10px 0 0; }
+
+/* ===== مفتاح الألوان ===== */
+.color-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 12px; font-size: .82rem; }
+.legend-item { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+.legend-swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; flex-shrink: 0; }
+
+/* ===== السحب لإعادة ترتيب الأعمدة ===== */
+.th-draggable { cursor: grab; user-select: none; }
+.th-draggable:active { cursor: grabbing; }
+.col-dragging { opacity: .4; }
+.col-drop-target { outline: 2px dashed var(--primary); outline-offset: -2px; background: var(--primary-soft) !important; }
+
+/* ===== معاينة الملفات ومحاذاة الأعمدة ===== */
+.align-hint { color: var(--muted); font-size: .85rem; margin: 0 0 14px; }
+.align-tables { display: flex; flex-direction: column; gap: 14px; overflow-x: auto; }
+.align-block { min-width: 100%; }
+.align-block-label { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: .84rem; margin-bottom: 5px; word-break: break-all; }
+.align-ref-label { color: var(--primary); }
+.align-table { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: .8rem; min-width: 460px; }
+.align-table th, .align-table td {
+  border: 1px solid var(--border);
+  padding: 5px 8px;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.align-table th { background: #f8fafc; font-weight: 600; }
+.align-ref th { background: var(--primary-soft); color: var(--primary); }
+.align-file { border-inline-start: 4px solid var(--file-color, transparent); padding-inline-start: 10px; }
+.align-file .align-table th { background: var(--file-color); color: #fff; border-color: rgba(255, 255, 255, .35); }
+.align-file .align-table th.align-empty-col { background: #e2e8f0; color: var(--muted); }
+.align-table td.empty-cell { color: #cbd5e1; font-style: italic; }
 
 /* ===== التذييل ===== */
 .footer {

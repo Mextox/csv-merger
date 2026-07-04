@@ -1,5 +1,5 @@
 "use strict";
-const { parseCSV, detectDelimiter, classifyValue, detectHasHeader, analyzeFile, crossFileChecks, buildMerge, toCSV } = require("./app.js");
+const { parseCSV, detectDelimiter, classifyValue, detectHasHeader, analyzeFile, crossFileChecks, buildMerge, toCSV, autoMergePlan, mergeWithMaps } = require("./app.js");
 
 let passed = 0, failed = 0;
 function check(name, cond, extra) {
@@ -161,6 +161,58 @@ check("empty file flagged", ef.empty === true && ef.issues.some((i) => i.severit
 const csv = toCSV(["a", "b"], [['x,"y', "line1\nline2"], ["plain", "z"]], ",");
 const back = parseCSV(csv, ",");
 check("csv round-trip", back.rows[1][0] === 'x,"y' && back.rows[1][1] === "line1\nline2" && back.rows[2][0] === "plain", back.rows);
+
+// --- الدمج الموضعي "الذكي": مثال المستخدم حرفيًا (ملفان أرقام بلا رأس)
+const posA = analyzeFile("posA.csv", "10,100,500\n", opts);
+const posB = analyzeFile("posB.csv", "100,50,1000\n", opts);
+check("pos example both headerless", posA.hasHeader === false && posB.hasHeader === false, [posA.hasHeader, posB.hasHeader]);
+const mPos = buildMerge([posA, posB], opts);
+check("pos example no header row", mPos.includeHeader === false);
+check("pos example 3 columns", mPos.headers.length === 3, mPos.headers);
+check("pos example 2 rows", mPos.rows.length === 2, mPos.rows);
+check("pos example column alignment (first under first)",
+  mPos.rows[0].join("|") === "10|100|500" && mPos.rows[1].join("|") === "100|50|1000", mPos.rows);
+
+// --- خرائط الأعمدة: الخطة التلقائية مطابقة لسلوك buildMerge
+const planAB = autoMergePlan([a1, a2], opts);
+check("auto plan cols count", planAB.finalCols.length === 5, planAB.finalCols.length);
+check("auto plan map named file nulls missing", planAB.maps[0][4] === null && planAB.maps[0][0] === 0, planAB.maps[0]);
+check("auto plan map reordered-by-name file", planAB.maps[1].join(",") === "1,0,3,2,4", planAB.maps[1]);
+const baseMap = mergeWithMaps([a1, a2], opts, planAB);
+check("mergeWithMaps matches buildMerge headers", baseMap.headers.join("|") === "الاسم|البريد|المدينة|العمر|الهاتف", baseMap.headers);
+check("mergeWithMaps matches buildMerge rows", baseMap.rows.length === 12, baseMap.rows.length);
+check("mergeWithMaps returns row sources", baseMap.sources.length === 12 && baseMap.sources[0] === 0 && baseMap.sources[11] === 1, baseMap.sources);
+
+function clonePlan(p) {
+  return { finalCols: p.finalCols.slice(), headers: p.headers.slice(), includeHeader: p.includeHeader, maps: p.maps.map((m) => m.slice()) };
+}
+
+// إعادة ترتيب أعمدة الناتج: انقل العمود 0 (الاسم) إلى النهاية لكل الملفات معًا
+const reord = clonePlan(planAB);
+[reord.finalCols, reord.headers, ...reord.maps].forEach((arr) => { const [x] = arr.splice(0, 1); arr.splice(4, 0, x); });
+const mReord = mergeWithMaps([a1, a2], opts, reord);
+check("reorder output headers", mReord.headers.join("|") === "البريد|المدينة|العمر|الهاتف|الاسم", mReord.headers);
+const hassanReord = mReord.rows.find((r) => r[0] === "hassan@mail.com");
+check("reorder keeps values aligned", hassanReord && hassanReord[4] === "حسن إبراهيم" && hassanReord[2] === "38", hassanReord);
+
+// تبديل عمودين لملف واحد فقط: بدّل خريطة a1 بين الموضعين 0 و1، وتحقق أن a2 لم يتأثر
+const swap = clonePlan(planAB);
+const tmp = swap.maps[0][0]; swap.maps[0][0] = swap.maps[0][1]; swap.maps[0][1] = tmp;
+const mSwap = mergeWithMaps([a1, a2], opts, swap);
+const ahmedSwap = mSwap.rows.find((r) => r[0] === "ahmed@mail.com"); // الآن العمود 0 يحمل بريد a1
+check("swap one file: col0 now holds its email", ahmedSwap && ahmedSwap[1] === "أحمد علي", ahmedSwap);
+const hassanSwap = mSwap.rows.find((r) => r[1] === "hassan@mail.com"); // الملف الآخر بلا تغيير
+check("swap one file: other file unchanged", hassanSwap && hassanSwap[0] === "حسن إبراهيم", hassanSwap);
+
+// خرائط ملف بدون رأس + إعادة ترتيب أعمدته موضعيًا
+const planHl = autoMergePlan([hl1, hl2], opts);
+check("headerless plan no header row", planHl.includeHeader === false);
+check("headerless plan positional maps", planHl.maps[0].join(",") === "0,1,2" && planHl.maps[1].join(",") === "0,1,2", planHl.maps);
+const hlSwap = clonePlan(planHl);
+const t2 = hlSwap.maps[0][0]; hlSwap.maps[0][0] = hlSwap.maps[0][2]; hlSwap.maps[0][2] = t2; // بدّل العمود الأول والثالث لـ hl1
+const mHlSwap = mergeWithMaps([hl1, hl2], opts, hlSwap);
+check("headerless swap file col", mHlSwap.rows[0][0] === "34" && mHlSwap.rows[0][2] === "أحمد", mHlSwap.rows[0]);
+check("headerless swap other file untouched", mHlSwap.rows[2][0] === "حسن", mHlSwap.rows[2]);
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

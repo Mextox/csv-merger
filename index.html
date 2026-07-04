@@ -6,7 +6,7 @@
 <title>دمج ملفات CSV — أداة احترافية بدون تخزين</title>
 <meta name="description" content="أداة احترافية لدمج ملفات CSV داخل المتصفح مع فحص التناقضات والأخطاء الشائعة — لا يُرفع أو يُخزَّن أي شيء.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧩</text></svg>">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
 
@@ -66,6 +66,16 @@
     </div>
   </section>
 
+  <!-- معاينة الملفات ومحاذاة الأعمدة -->
+  <section id="alignSection" class="card" hidden>
+    <div class="card-head">
+      <h2>معاينة الملفات ومحاذاة الأعمدة</h2>
+      <button type="button" id="alignResetBtn" class="btn btn-ghost btn-sm">↺ إعادة الضبط التلقائي</button>
+    </div>
+    <p class="align-hint">اسحب رأس أي عمود داخل جدول ملف لتغيير العمود الذي يقع تحته من أعمدة الناتج — الأعمدة المتناظرة تظهر فوق بعضها عبر الملفات.</p>
+    <div id="alignTables" class="align-tables"></div>
+  </section>
+
   <!-- الفحوصات -->
   <section id="issuesSection" class="card" hidden>
     <div class="card-head">
@@ -82,6 +92,7 @@
       <button type="button" id="downloadBtn" class="btn btn-primary">⬇ تنزيل CSV المدموج</button>
     </div>
     <div id="resultStats" class="stats-row"></div>
+    <div id="colorLegend" class="color-legend"></div>
     <div class="table-wrap">
       <table id="previewTable"></table>
     </div>
@@ -97,6 +108,6 @@
   </div>
 </footer>
 
-<script src="app.js"></script>
+<script src="app.js?v=3"></script>
 </body>
 </html>
