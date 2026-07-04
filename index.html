@@ -6,7 +6,7 @@
 <title>دمج ملفات CSV — أداة احترافية بدون تخزين</title>
 <meta name="description" content="أداة احترافية لدمج ملفات CSV داخل المتصفح مع فحص التناقضات والأخطاء الشائعة — لا يُرفع أو يُخزَّن أي شيء.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧩</text></svg>">
-<link rel="stylesheet" href="style.css?v=4">
+<link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
 
@@ -28,15 +28,15 @@
 <main class="container">
 
   <!-- منطقة الإفلات -->
-  <section id="dropzone" class="dropzone" tabindex="0" role="button" aria-label="اختر أو أسقط ملفات CSV">
+  <section id="dropzone" class="dropzone" tabindex="0" role="button" aria-label="اختر أو أسقط ملفات CSV أو Excel">
     <div class="dz-icon">📂</div>
-    <p class="dz-title">اسحب ملفات CSV وأفلتها هنا</p>
+    <p class="dz-title">اسحب ملفات CSV أو Excel وأفلتها هنا</p>
     <p class="dz-sub">أو</p>
     <div class="dz-actions">
       <button type="button" id="pickBtn" class="btn btn-primary">اختر الملفات</button>
       <button type="button" id="demoBtn" class="btn btn-ghost">جرّب بملفات تجريبية</button>
     </div>
-    <input type="file" id="fileInput" accept=".csv,text/csv,text/plain" multiple hidden>
+    <input type="file" id="fileInput" accept=".csv,.xlsx,.xlsm,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12" multiple hidden>
   </section>
 
   <!-- قائمة الملفات -->
@@ -127,6 +127,6 @@
   </div>
 </footer>
 
-<script src="app.js?v=4"></script>
+<script src="app.js?v=5"></script>
 </body>
 </html>
