@@ -622,6 +622,15 @@ function mergeSlices(usable, opts, plan, slices) {
   return mergeWithMaps(pseudo, opts, plan);
 }
 
+// اسم ملف CSV داخل الأرشيف: يزيل امتداد المصدر (حتى لو تلاه اسم الورقة مثل "كتاب.xlsx — بيانات")
+// وينظّف المحارف غير الصالحة في أسماء الملفات ثم يفرض الامتداد .csv — المحتوى دائمًا CSV.
+function csvEntryName(rawName) {
+  let s = String(rawName || "").replace(/\.(csv|txt|xlsx|xlsm)(?=$| — )/i, "");
+  s = s.replace(/[\/\\:*?"<>|\x00-\x1f]/g, "-").trim();
+  if (!s) s = "ملف";
+  return s + ".csv";
+}
+
 /* ---------- كاتب ZIP (طريقة STORE بلا ضغط، بلا أي تبعيات) ---------- */
 
 // جدول CRC-32 (متعدد الحدود 0xEDB88320) يُبنى مرة واحدة ويُخزَّن.
@@ -1824,8 +1833,9 @@ if (typeof document !== "undefined") {
     $("extractBtn").disabled = false;
 
     const inputs = []; // inputs[companyIdx][categoryIdx]
+    const subs = [];   // subs[companyIdx][categoryIdx] — لصّاقة «المتاح» الحية تحت كل مدخل
 
-    // تحديث العرض الحي: المتاح لكل مدخل + ملخص المتبقي لكل فئة — دون إعادة بناء الحقول (حفاظًا على التركيز)
+    // تحديث العرض الحي: المتاح لكل مدخل (يتناقص مع الكتابة) + ملخص المتبقي لكل فئة — دون إعادة بناء الحقول (حفاظًا على التركيز)
     function updateLive() {
       const companies = normalizeCompanies(usable.length);
       const view = splitView(usable, companies);
@@ -1833,6 +1843,14 @@ if (typeof document !== "undefined") {
         r.avail.forEach((av, fi) => {
           const inp = inputs[ci] && inputs[ci][fi];
           if (inp) inp.max = String(av);
+          const sub = subs[ci] && subs[ci][fi];
+          if (sub) {
+            const left = av - r.take[fi];
+            sub.textContent = `المتاح: ${left} صف`;
+            const wanted = inp ? Math.max(0, Math.floor(Number(inp.value) || 0)) : 0;
+            sub.classList.toggle("cat-over", wanted > av);
+            if (wanted > av) sub.textContent = `المتاح: ${left} صف — العدد المكتوب يتجاوز المتاح (${av})`;
+          }
         });
       });
       remainEl.innerHTML = "";
@@ -1849,7 +1867,10 @@ if (typeof document !== "undefined") {
           const chip = document.createElement("span");
           chip.className = "cat-chip";
           chip.style.setProperty("--file-color", usableColors[fi].solid);
-          chip.textContent = `${f.name}: ${view.remaining[fi]}`;
+          const nameB = document.createElement("bdi"); // عزل اتجاه الاسم حتى لا تختلط الأرقام اللاتينية بالعربية
+          nameB.textContent = f.name;
+          chip.appendChild(nameB);
+          chip.appendChild(document.createTextNode(` — المتبقي: ${view.remaining[fi]} صف`));
           remainEl.appendChild(chip);
         });
       }
@@ -1857,6 +1878,7 @@ if (typeof document !== "undefined") {
 
     split.companies.forEach((co, ci) => {
       inputs[ci] = [];
+      subs[ci] = [];
       if (!Array.isArray(co.counts)) co.counts = [];
       const card = document.createElement("div");
       card.className = "company-card";
@@ -1899,23 +1921,33 @@ if (typeof document !== "undefined") {
         cell.className = "cat-cell";
         cell.style.setProperty("--file-color", usableColors[fi].solid);
 
-        const nm = document.createElement("span");
+        const nm = document.createElement("bdi"); // bdi: يعزل اتجاه الاسم (أسماء لاتينية/رقمية داخل واجهة عربية)
         nm.className = "cat-name";
         nm.textContent = f.name;
         const sub = document.createElement("span");
         sub.className = "cat-sub";
-        sub.textContent = `${f.dataRows.length} صف متاح`;
+        sub.textContent = `المتاح: ${f.dataRows.length} صف`;
 
         const inp = document.createElement("input");
         inp.type = "number";
         inp.min = "0";
+        inp.step = "1";
+        inp.inputMode = "numeric";
         inp.className = "cat-input";
         inp.value = String(co.counts[fi] != null ? co.counts[fi] : 0);
         inp.addEventListener("input", () => {
           co.counts[fi] = Math.max(0, Math.floor(Number(inp.value) || 0));
           updateLive();
         });
+        inp.addEventListener("change", () => {
+          // عند الخروج من الحقل: تثبيت القيمة على عدد صحيح ضمن المتاح (max يحدَّث حيًّا في updateLive)
+          const cap = Math.max(0, Math.floor(Number(inp.max) || 0));
+          co.counts[fi] = Math.min(Math.max(0, Math.floor(Number(inp.value) || 0)), cap);
+          inp.value = String(co.counts[fi]);
+          updateLive();
+        });
         inputs[ci][fi] = inp;
+        subs[ci][fi] = sub;
 
         cell.appendChild(nm);
         cell.appendChild(sub);
@@ -2001,10 +2033,16 @@ if (typeof document !== "undefined") {
       entries.push({ name: path, data: enc.encode(BOM + csv) });
     }
     function addUnmerged(folder, slices) {
+      const used = new Set();
       slices.forEach((s) => {
         const f = usable[s.fileIndex];
         const own = sliceOwnColumns(f, s.rows, deletedSrcColsFor(s.fileIndex));
-        addCSV(`${folder}/${f.name}`, own.headers, own.rows);
+        let name = csvEntryName(f.name);
+        const base = name.slice(0, -4);
+        let k = 2;
+        while (used.has(name)) name = `${base} (${k++}).csv`;
+        used.add(name);
+        addCSV(`${folder}/${name}`, own.headers, own.rows);
       });
     }
 
@@ -2013,7 +2051,7 @@ if (typeof document !== "undefined") {
       const folder = folderName(co.name, `شركة ${i + 1}`);
       if (co.merge) {
         const m = mergeSlices(usable, opts, effPlan, co.slices);
-        addCSV(`${folder}/merged.csv`, m.includeHeader ? m.headers : null, m.rows);
+        addCSV(`${folder}/${folder}.csv`, m.includeHeader ? m.headers : null, m.rows);
       } else {
         addUnmerged(folder, co.slices);
       }
@@ -2023,7 +2061,7 @@ if (typeof document !== "undefined") {
       const folder = folderName("المتبقي", "المتبقي");
       if (remainderMode === "merge") {
         const m = mergeSlices(usable, opts, effPlan, plan.remainder);
-        addCSV(`${folder}/merged.csv`, m.includeHeader ? m.headers : null, m.rows);
+        addCSV(`${folder}/${folder}.csv`, m.includeHeader ? m.headers : null, m.rows);
       } else {
         addUnmerged(folder, plan.remainder);
       }
@@ -2117,5 +2155,5 @@ if (typeof document !== "undefined") {
 
 /* تصدير للاختبار في Node — لا تأثير له داخل المتصفح */
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseCSV, detectDelimiter, classifyValue, detectHasHeader, analyzeFile, analyzeRows, crossFileChecks, buildMerge, toCSV, csvEscape, planColumns, defaultFileMap, autoMergePlan, mergeWithMaps, filterDeletedColumns, sliceOwnColumns, planSplit, mergeSlices, crc32, buildZip, parseZipEntries, parseXlsx, parseSharedStrings, parseWorkbookSheets, parseRels, parseStyles, parseSheet, cellValue, colRefToIndex, classifyNumFmt, excelSerialToText, decodeXml, trimTrailingEmpty, xlsxSheetsToFiles };
+  module.exports = { parseCSV, detectDelimiter, classifyValue, detectHasHeader, analyzeFile, analyzeRows, crossFileChecks, buildMerge, toCSV, csvEscape, planColumns, defaultFileMap, autoMergePlan, mergeWithMaps, filterDeletedColumns, sliceOwnColumns, planSplit, mergeSlices, csvEntryName, crc32, buildZip, parseZipEntries, parseXlsx, parseSharedStrings, parseWorkbookSheets, parseRels, parseStyles, parseSheet, cellValue, colRefToIndex, classifyNumFmt, excelSerialToText, decodeXml, trimTrailingEmpty, xlsxSheetsToFiles };
 }

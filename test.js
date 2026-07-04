@@ -547,6 +547,20 @@ async function runExcelTests() {
   check("split ZIP entry readable back", splitBack.length === 1 && new TextDecoder().decode(splitBack[0].data).includes("أحمد"), splitBack.length);
 }
 
+// --- csvEntryName: أسماء ملفات الأرشيف تُجبر دائمًا على الامتداد .csv
+{
+  const { csvEntryName } = require("./app.js");
+  check("csvEntryName keeps csv", csvEntryName("عملاء.csv") === "عملاء.csv", csvEntryName("عملاء.csv"));
+  check("csvEntryName xlsx -> csv", csvEntryName("45.xlsx") === "45.csv", csvEntryName("45.xlsx"));
+  check("csvEntryName xlsm -> csv", csvEntryName("ماكرو.XLSM") === "ماكرو.csv", csvEntryName("ماكرو.XLSM"));
+  check("csvEntryName txt -> csv", csvEntryName("بيانات.txt") === "بيانات.csv", csvEntryName("بيانات.txt"));
+  check("csvEntryName sheet-suffixed xlsx", csvEntryName("كتاب.xlsx — بيانات") === "كتاب — بيانات.csv", csvEntryName("كتاب.xlsx — بيانات"));
+  check("csvEntryName strips illegal chars", csvEntryName('a/b\\c:d*e?f"g<h>i|j.xlsx') === "a-b-c-d-e-f-g-h-i-j.csv", csvEntryName('a/b\\c:d*e?f"g<h>i|j.xlsx'));
+  check("csvEntryName no extension", csvEntryName("بدون امتداد") === "بدون امتداد.csv", csvEntryName("بدون امتداد"));
+  check("csvEntryName empty fallback", csvEntryName("") === "ملف.csv", csvEntryName(""));
+  check("csvEntryName dot not extension kept", csvEntryName("v1.2-تقرير") === "v1.2-تقرير.csv", csvEntryName("v1.2-تقرير"));
+}
+
 runExcelTests().then(() => {
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

@@ -356,6 +356,7 @@ body {
 }
 .cat-name { font-weight: 600; font-size: .85rem; word-break: break-all; }
 .cat-sub { grid-column: 1; color: var(--muted); font-size: .75rem; }
+.cat-sub.cat-over { color: var(--error); font-weight: 600; }
 .cat-input {
   grid-column: 2;
   grid-row: 1 / span 2;
