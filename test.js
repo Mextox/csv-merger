@@ -303,5 +303,256 @@ const diskEntries = zip[eocdAt + 8] | (zip[eocdAt + 9] << 8);
 check("zip EOCD total entry count matches", totalEntries === zEntries.length, totalEntries);
 check("zip EOCD disk entry count matches", diskEntries === zEntries.length, diskEntries);
 
-console.log(`\n${passed} passed, ${failed} failed`);
-process.exit(failed ? 1 : 0);
+// =====================================================================
+// دعم Excel (.xlsx): قارئ ZIP + تحليل XML + التواريخ + التكامل مع المسار الحالي
+// كل العيّنات تُبنى داخل الاختبار عبر buildZip (STORE) + سلاسل XML مكتوبة يدويًا.
+// =====================================================================
+const {
+  parseXlsx, parseZipEntries, parseSharedStrings, parseSheet, parseStyles,
+  colRefToIndex, classifyNumFmt, excelSerialToText, decodeXml, trimTrailingEmpty,
+  xlsxSheetsToFiles, analyzeRows,
+} = require("./app.js");
+const zlib = require("zlib");
+
+const XENC = new TextEncoder();
+
+// يبني خريطة ملفات مصنّف قياسية (workbook + rels + أوراق + اختياريًا sharedStrings/styles)
+function workbookFiles(sheets, extra) {
+  extra = extra || {};
+  const files = {};
+  const sheetEls = sheets.map((s, i) => `<sheet name="${s.name}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join("");
+  const wbPr = extra.date1904 ? `<workbookPr date1904="1"/>` : "";
+  files["xl/workbook.xml"] =
+    `<?xml version="1.0" encoding="UTF-8"?>` +
+    `<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +
+    wbPr + `<sheets>` + sheetEls + `</sheets></workbook>`;
+  const relEls = sheets.map((s, i) =>
+    `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join("");
+  files["xl/_rels/workbook.xml.rels"] =
+    `<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` + relEls + `</Relationships>`;
+  sheets.forEach((s, i) => { files[`xl/worksheets/sheet${i + 1}.xml`] = s.xml; });
+  if (extra.sharedStrings != null) files["xl/sharedStrings.xml"] = extra.sharedStrings;
+  if (extra.styles != null) files["xl/styles.xml"] = extra.styles;
+  return files;
+}
+function filesToEntries(files) {
+  return Object.keys(files).map((name) => ({ name, data: XENC.encode(files[name]) }));
+}
+function buildWorkbook(sheets, extra) { return buildZip(filesToEntries(workbookFiles(sheets, extra))); }
+function wsheet(rowsXml) {
+  return `<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${rowsXml}</sheetData></worksheet>`;
+}
+function sst(items) {
+  return `<?xml version="1.0"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
+    items.map((it) => `<si>${it}</si>`).join("") + `</sst>`;
+}
+// كاتب ZIP بطريقة DEFLATE (لاختبار مسار فكّ الضغط في القارئ) — يعيد استخدام crc32 المُصدَّر
+function buildZipDeflate(entries) {
+  const u16 = (n) => [n & 0xff, (n >>> 8) & 0xff];
+  const u32 = (n) => { n = n >>> 0; return [n & 0xff, (n >>> 8) & 0xff, (n >>> 16) & 0xff, (n >>> 24) & 0xff]; };
+  const local = [], central = [];
+  let offset = 0;
+  entries.forEach((e) => {
+    const nameBytes = XENC.encode(e.name);
+    const comp = new Uint8Array(zlib.deflateRawSync(Buffer.from(e.data)));
+    const crc = crc32(e.data);
+    const lh = [].concat(u32(0x04034b50), u16(20), u16(0x0800), u16(8), u16(0), u16(0x21),
+      u32(crc), u32(comp.length), u32(e.data.length), u16(nameBytes.length), u16(0));
+    const lhArr = Uint8Array.from(lh);
+    local.push(lhArr, nameBytes, comp);
+    const localOffset = offset; offset += lhArr.length + nameBytes.length + comp.length;
+    const ch = [].concat(u32(0x02014b50), u16(20), u16(20), u16(0x0800), u16(8), u16(0), u16(0x21),
+      u32(crc), u32(comp.length), u32(e.data.length), u16(nameBytes.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(localOffset));
+    central.push(Uint8Array.from(ch), nameBytes);
+  });
+  let centralSize = 0; central.forEach((p) => { centralSize += p.length; });
+  const centralOffset = offset;
+  const eocd = [].concat(u32(0x06054b50), u16(0), u16(0), u16(entries.length), u16(entries.length), u32(centralSize), u32(centralOffset), u16(0));
+  const eocdArr = Uint8Array.from(eocd);
+  const out = new Uint8Array(offset + centralSize + eocdArr.length);
+  let pos = 0;
+  local.forEach((p) => { out.set(p, pos); pos += p.length; });
+  central.forEach((p) => { out.set(p, pos); pos += p.length; });
+  out.set(eocdArr, pos);
+  return out;
+}
+
+async function runExcelTests() {
+  // --- colRefToIndex
+  check("colRef A→0", colRefToIndex("A") === 0);
+  check("colRef Z→25", colRefToIndex("Z") === 25);
+  check("colRef AA→26", colRefToIndex("AA") === 26);
+  check("colRef AB→27", colRefToIndex("AB") === 27);
+  check("colRef strips row (C5→2)", colRefToIndex("C5") === 2);
+
+  // --- classifyNumFmt: builtins + custom
+  check("numFmt 14 builtin date", classifyNumFmt(14, null) === "date");
+  check("numFmt 22 builtin datetime", classifyNumFmt(22, null) === "datetime");
+  check("numFmt 21 builtin time", classifyNumFmt(21, null) === "time");
+  check("numFmt 47 builtin time", classifyNumFmt(47, null) === "time");
+  check("numFmt 0 general → null", classifyNumFmt(0, null) === null);
+  check("numFmt 2 numeric → null", classifyNumFmt(2, "0.00") === null);
+  check("custom date code", classifyNumFmt(164, "yyyy-mm-dd") === "date");
+  check("custom datetime code", classifyNumFmt(165, "yyyy-mm-dd hh:mm:ss") === "datetime");
+  check("custom time code (h+mm)", classifyNumFmt(166, "h:mm") === "time");
+  check("custom month name → date", classifyNumFmt(167, "mmm-yy") === "date");
+  check("custom with literal + entities → date", classifyNumFmt(168, '"التاريخ "yyyy-mm-dd') === "date");
+
+  // --- excelSerialToText (1900 + 1904 + fractions)
+  check("serial→date 44197=2021-01-01", excelSerialToText(44197, "date", false) === "2021-01-01", excelSerialToText(44197, "date", false));
+  check("serial→datetime .5 = noon", excelSerialToText(44197.5, "datetime", false) === "2021-01-01 12:00:00", excelSerialToText(44197.5, "datetime", false));
+  check("serial→time 0.75 = 18:00:00", excelSerialToText(0.75, "time", false) === "18:00:00", excelSerialToText(0.75, "time", false));
+  check("serial→date 1904 (42735=2021-01-01)", excelSerialToText(42735, "date", true) === "2021-01-01", excelSerialToText(42735, "date", true));
+
+  // --- decodeXml
+  check("decodeXml entities", decodeXml("a &amp; b &lt;c&gt; &quot;d&quot; &apos;e&apos;") === 'a & b <c> "d" \'e\'', decodeXml("a &amp; b &lt;c&gt;"));
+  check("decodeXml numeric", decodeXml("&#65;&#x42;") === "AB", decodeXml("&#65;&#x42;"));
+
+  // --- parseSharedStrings: simple + rich runs + entity
+  const ss = parseSharedStrings(sst(["<t>hello</t>", "<r><t>a &amp; </t></r><r><t>b</t></r>", "<t xml:space=\"preserve\"> x </t>"]));
+  check("sst simple", ss[0] === "hello", ss);
+  check("sst rich-text runs concatenated", ss[1] === "a & b", ss);
+  check("sst preserve space", ss[2] === " x ", JSON.stringify(ss[2]));
+
+  // --- parseZipEntries: round-trip a STORE zip built by buildZip
+  const rtZip = buildZip([{ name: "أ/ملف.txt", data: XENC.encode("محتوى 1") }, { name: "b.bin", data: Uint8Array.from([1, 2, 3, 255]) }]);
+  const rtEntries = await parseZipEntries(rtZip);
+  check("zip reader round-trips names", rtEntries.map((e) => e.name).join("|") === "أ/ملف.txt|b.bin", rtEntries.map((e) => e.name));
+  check("zip reader round-trips STORE data", new TextDecoder().decode(rtEntries[0].data) === "محتوى 1" && rtEntries[1].data[3] === 255, rtEntries[1].data);
+
+  // --- comprehensive sheet: shared str, inlineStr, gap fill, number, boolean, error, formula(str+num), entity
+  const compSheet = wsheet(
+    `<row r="1"><c r="A1" t="s"><v>0</v></c><c r="C1" t="inlineStr"><is><t>سطر &amp; مضمّن</t></is></c></row>` +
+    `<row r="2"><c r="A2"><v>42</v></c><c r="B2" t="b"><v>1</v></c><c r="C2" t="e"><v>#DIV/0!</v></c></row>` +
+    `<row r="3"><c r="A3" t="str"><f>X()</f><v>ناتج صيغة</v></c><c r="B3"><f>SUM(A1:A2)</f><v>42</v></c><c r="C3" t="s"><v>1</v></c></row>`
+  );
+  const compWb = buildWorkbook([{ name: "Main", xml: compSheet }], { sharedStrings: sst(["<t>مرحبا</t>", "<t>a &amp; b</t>"]) });
+  const compSheets = await parseXlsx(compWb);
+  const cr = compSheets[0].rows;
+  check("xlsx shared string value", cr[0][0] === "مرحبا", cr[0]);
+  check("xlsx column gap filled empty (B1)", cr[0][1] === "", cr[0]);
+  check("xlsx inlineStr + entity", cr[0][2] === "سطر & مضمّن", cr[0]);
+  check("xlsx number cell", cr[1][0] === "42", cr[1]);
+  check("xlsx boolean → TRUE", cr[1][1] === "TRUE", cr[1]);
+  check("xlsx error cell → empty", cr[1][2] === "", cr[1]);
+  check("xlsx formula cached string", cr[2][0] === "ناتج صيغة", cr[2]);
+  check("xlsx numeric formula cached value", cr[2][1] === "42", cr[2]);
+  check("xlsx shared string entity decoded", cr[2][2] === "a & b", cr[2]);
+
+  // --- DEFLATE path: same workbook compressed with deflate-raw
+  const compWbDeflate = buildZipDeflate(filesToEntries(workbookFiles([{ name: "Main", xml: compSheet }], { sharedStrings: sst(["<t>مرحبا</t>", "<t>a &amp; b</t>"]) })));
+  const dfSheets = await parseXlsx(compWbDeflate);
+  check("xlsx DEFLATE entries decode", dfSheets[0].rows[0][0] === "مرحبا" && dfSheets[0].rows[2][2] === "a & b", dfSheets[0].rows);
+
+  // --- dates via styles (builtin + custom datetime + builtin time), non-date numeric stays number
+  const styleXml = `<?xml version="1.0"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
+    `<numFmts count="1"><numFmt numFmtId="164" formatCode="yyyy-mm-dd hh:mm:ss"/></numFmts>` +
+    `<cellXfs count="4"><xf numFmtId="0"/><xf numFmtId="14"/><xf numFmtId="164"/><xf numFmtId="21"/></cellXfs></styleSheet>`;
+  const dateSheet = wsheet(
+    `<row r="1"><c r="A1" s="1"><v>44197</v></c><c r="B1" s="2"><v>44197.5</v></c><c r="C1" s="3"><v>0.75</v></c><c r="D1" s="0"><v>44197</v></c></row>`
+  );
+  const dateWb = buildWorkbook([{ name: "Dates", xml: dateSheet }], { styles: styleXml });
+  const dateRows = (await parseXlsx(dateWb))[0].rows;
+  check("xlsx builtin date (14)", dateRows[0][0] === "2021-01-01", dateRows[0]);
+  check("xlsx custom datetime (164)", dateRows[0][1] === "2021-01-01 12:00:00", dateRows[0]);
+  check("xlsx builtin time (21)", dateRows[0][2] === "18:00:00", dateRows[0]);
+  check("xlsx unstyled number stays numeric", dateRows[0][3] === "44197", dateRows[0]);
+
+  // --- date1904 offset applied through the pipeline
+  const wb1904 = buildWorkbook([{ name: "D1904", xml: wsheet(`<row r="1"><c r="A1" s="1"><v>42735</v></c></row>`) }], { styles: styleXml, date1904: true });
+  const rows1904 = (await parseXlsx(wb1904))[0].rows;
+  check("xlsx date1904 offset", rows1904[0][0] === "2021-01-01", rows1904[0]);
+
+  // --- trailing empty row/column trimming
+  const trimSheet = wsheet(
+    `<row r="1"><c r="A1" t="inlineStr"><is><t>x</t></is></c><c r="B1" t="inlineStr"><is><t></t></is></c></row>` +
+    `<row r="2"><c r="A2" t="inlineStr"><is><t>y</t></is></c></row>` +
+    `<row r="3"><c r="A3" t="inlineStr"><is><t></t></is></c></row>`
+  );
+  const trimRows = (await parseXlsx(buildWorkbook([{ name: "Trim", xml: trimSheet }])))[0].rows;
+  check("xlsx trims trailing empty rows", trimRows.length === 2, trimRows.length);
+  check("xlsx trims trailing empty cols", trimRows[0].length === 1 && trimRows[0][0] === "x", trimRows[0]);
+  // parseSheet direct trim check
+  const directTrim = trimTrailingEmpty([["a", "", ""], ["b", "", ""], ["", "", ""]]);
+  check("trimTrailingEmpty direct", directTrim.length === 2 && directTrim[0].length === 1, directTrim);
+
+  // --- multi-sheet naming + empty-sheet skipping
+  const multiWb = buildWorkbook([
+    { name: "بيانات", xml: wsheet(`<row r="1"><c r="A1" t="inlineStr"><is><t>ا</t></is></c></row>`) },
+    { name: "فارغة", xml: wsheet(``) },
+    { name: "أخرى", xml: wsheet(`<row r="1"><c r="A1" t="inlineStr"><is><t>ب</t></is></c></row>`) },
+  ]);
+  const multiSheets = await parseXlsx(multiWb);
+  check("xlsx returns all sheets incl empty", multiSheets.length === 3 && multiSheets[1].rows.length === 0, multiSheets.map((s) => s.rows.length));
+  const multiFiles = xlsxSheetsToFiles("كتاب.xlsx", multiSheets);
+  check("multi-sheet skips empty sheet", multiFiles.length === 2, multiFiles.map((f) => f.name));
+  check("multi-sheet naming uses — SheetName", multiFiles[0].name === "كتاب.xlsx — بيانات" && multiFiles[1].name === "كتاب.xlsx — أخرى", multiFiles.map((f) => f.name));
+  const oneFiles = xlsxSheetsToFiles("وحيد.xlsx", [{ sheetName: "Sheet1", rows: [["v"]] }]);
+  check("single non-empty sheet named after file", oneFiles.length === 1 && oneFiles[0].name === "وحيد.xlsx", oneFiles);
+
+  // --- .xls (OLE2) rejection
+  let oleErr = null;
+  try { await parseXlsx(Uint8Array.from([0xd0, 0xcf, 0x11, 0xe0, 0, 0, 0, 0])); } catch (e) { oleErr = e; }
+  check(".xls OLE2 rejected with code", oleErr && oleErr.code === "OLE2", oleErr && oleErr.code);
+  check(".xls OLE2 arabic message", oleErr && oleErr.arMessage.includes("غير مدعومة") && oleErr.arMessage.includes("xlsx"), oleErr && oleErr.arMessage);
+
+  // --- corrupt zip / non-xlsx rejection
+  let badErr = null;
+  try { await parseXlsx(Uint8Array.from([0x50, 0x4b, 0x03, 0x04, 1, 2, 3, 4, 5, 6, 7, 8])); } catch (e) { badErr = e; }
+  check("corrupt zip rejected (BADXLSX)", badErr && badErr.code === "BADXLSX", badErr && badErr.code);
+  let notZip = null;
+  try { await parseXlsx(XENC.encode("just some text, not a zip")); } catch (e) { notZip = e; }
+  check("non-xlsx bytes rejected", notZip && notZip.code === "BADXLSX", notZip && notZip.code);
+  let zipErr = null;
+  try { await parseZipEntries(Uint8Array.from([1, 2, 3, 4, 5])); } catch (e) { zipErr = e; }
+  check("parseZipEntries throws on garbage", zipErr && zipErr.code === "BADZIP", zipErr && zipErr.code);
+
+  // --- End-to-end: parse xlsx → analyzeRows → merge with a CSV file
+  const e2eXlsx = buildWorkbook([{
+    name: "عملاء", xml: wsheet(
+      `<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row>` +
+      `<row r="2"><c r="A2" t="s"><v>2</v></c><c r="B2"><v>30</v></c></row>` +
+      `<row r="3"><c r="A3" t="s"><v>3</v></c><c r="B3"><v>25</v></c></row>`),
+  }], { sharedStrings: sst(["<t>الاسم</t>", "<t>العمر</t>", "<t>أحمد</t>", "<t>سارة</t>"]) });
+  const e2eSheets = await parseXlsx(e2eXlsx);
+  const xa = analyzeRows("عملاء.xlsx", e2eSheets[0].rows, opts, null, { excel: { sheetName: "عملاء" } });
+  check("excel analyzeRows detects header", xa.hasHeader === true && xa.headers.join("|") === "الاسم|العمر", xa.headers);
+  check("excel analyzeRows data rows", xa.dataRows.length === 2 && xa.dataRows[0].join("|") === "أحمد|30", xa.dataRows);
+  check("excel analyzed carries excel meta, no delimiter", xa.excel && xa.excel.sheetName === "عملاء" && xa.delimiter === null, [xa.excel, xa.delimiter]);
+  const csvB = analyzeFile("more.csv", "الاسم,العمر\nخالد,40\n", opts);
+  const e2eMerge = buildMerge([xa, csvB], opts);
+  check("excel+csv merge headers", e2eMerge.headers.join("|") === "الاسم|العمر", e2eMerge.headers);
+  check("excel+csv merge row total", e2eMerge.rows.length === 3, e2eMerge.rows.length);
+  const khaled = e2eMerge.rows.find((r) => r[0] === "خالد");
+  const ahmed = e2eMerge.rows.find((r) => r[0] === "أحمد");
+  check("excel+csv merged values aligned", khaled && khaled[1] === "40" && ahmed && ahmed[1] === "30", [khaled, ahmed]);
+
+  // --- delimiter cross-check must NOT fire against Excel files
+  const csvSemi = analyzeFile("semi.csv", "الاسم;العمر\nع;5\n", opts);
+  const crossExcel = crossFileChecks([xa, csvSemi], opts);
+  check("no delimiter diff issue when one side is Excel", !crossExcel.some((i) => i.message.includes("فواصل مختلفة")), crossExcel.map((i) => i.message));
+  const csvComma = analyzeFile("comma.csv", "الاسم,العمر\nع,5\n", opts);
+  const crossCsv = crossFileChecks([csvComma, csvSemi], opts);
+  check("delimiter diff DOES fire between two CSVs", crossCsv.some((i) => i.message.includes("فواصل مختلفة")), crossCsv.map((i) => i.message));
+
+  // --- split / ZIP export including an Excel-sourced category
+  const splitPlan = autoMergePlan([xa, csvB], opts);
+  const sp2 = planSplit([xa, csvB], [{ name: "شركة أ", merge: true, counts: [2, 1] }]);
+  check("split takes 2 rows from Excel category", sp2.companies[0].slices.find((s) => s.fileIndex === 0).rows.length === 2, sp2.companies[0].slices);
+  const coMerged = mergeSlices([xa, csvB], opts, splitPlan, sp2.companies[0].slices);
+  check("split merged company row total (2 excel + 1 csv)", coMerged.rows.length === 3, coMerged.rows.length);
+  const splitZip = buildZip([{ name: "شركة أ/merged.csv", data: XENC.encode(toCSV(coMerged.includeHeader ? coMerged.headers : null, coMerged.rows, ",")) }]);
+  check("split ZIP with Excel category is valid", splitZip[0] === 0x50 && splitZip[1] === 0x4b && splitZip[6] === 0x00 && splitZip[7] === 0x08, [splitZip[0], splitZip[1]]);
+  const splitBack = await parseZipEntries(splitZip);
+  check("split ZIP entry readable back", splitBack.length === 1 && new TextDecoder().decode(splitBack[0].data).includes("أحمد"), splitBack.length);
+}
+
+runExcelTests().then(() => {
+  console.log(`\n${passed} passed, ${failed} failed`);
+  process.exit(failed ? 1 : 0);
+}).catch((e) => {
+  failed++;
+  console.log("FAIL: Excel test suite crashed | " + (e && e.stack ? e.stack : e));
+  console.log(`\n${passed} passed, ${failed} failed`);
+  process.exit(1);
+});
