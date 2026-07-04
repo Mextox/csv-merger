@@ -214,5 +214,94 @@ const mHlSwap = mergeWithMaps([hl1, hl2], opts, hlSwap);
 check("headerless swap file col", mHlSwap.rows[0][0] === "34" && mHlSwap.rows[0][2] === "أحمد", mHlSwap.rows[0]);
 check("headerless swap other file untouched", mHlSwap.rows[2][0] === "حسن", mHlSwap.rows[2]);
 
+// =====================================================================
+// التقسيم حسب الشركات + حذف الأعمدة + كاتب ZIP
+// =====================================================================
+const { filterDeletedColumns, sliceOwnColumns, planSplit, mergeSlices, crc32, buildZip } = require("./app.js");
+
+// --- planSplit: توزيع تسلسلي عبر شركتين + حساب المتبقي
+const fA = { name: "A.csv", hasHeader: true, headers: ["x"], dataRows: [["a1"], ["a2"], ["a3"], ["a4"], ["a5"]] };
+const fB = { name: "B.csv", hasHeader: true, headers: ["y"], dataRows: [["b1"], ["b2"], ["b3"]] };
+const sp = planSplit([fA, fB], [
+  { name: "c1", merge: false, counts: [2, 1] },
+  { name: "c2", merge: false, counts: [2, 0] },
+]);
+check("split c1 takes first 2 of A", sp.companies[0].slices.find((s) => s.fileIndex === 0).rows.map((r) => r[0]).join(",") === "a1,a2", sp.companies[0].slices);
+check("split c1 takes first 1 of B", sp.companies[0].slices.find((s) => s.fileIndex === 1).rows.map((r) => r[0]).join(",") === "b1", sp.companies[0].slices);
+check("split c2 takes next 2 of A", sp.companies[1].slices.find((s) => s.fileIndex === 0).rows.map((r) => r[0]).join(",") === "a3,a4", sp.companies[1].slices);
+check("split c2 takes none of B", !sp.companies[1].slices.some((s) => s.fileIndex === 1), sp.companies[1].slices);
+const remA = sp.remainder.find((s) => s.fileIndex === 0);
+const remB = sp.remainder.find((s) => s.fileIndex === 1);
+check("split remainder A = a5", remA && remA.rows.map((r) => r[0]).join(",") === "a5", remA);
+check("split remainder B = b2,b3", remB && remB.rows.map((r) => r[0]).join(",") === "b2,b3", remB);
+
+// --- planSplit: قصّ الطلب الزائد على المتاح
+const cl = planSplit([fA], [{ name: "big", merge: false, counts: [10] }]);
+check("split clamps over-allocation to 5", cl.companies[0].slices[0].rows.length === 5, cl.companies[0].slices[0].rows.length);
+check("split clamp leaves no remainder", cl.remainder.length === 0, cl.remainder);
+const cl2 = planSplit([fA], [
+  { name: "c1", merge: false, counts: [4] },
+  { name: "c2", merge: false, counts: [4] },
+]);
+check("split sequential clamp: c1 gets 4", cl2.companies[0].slices[0].rows.length === 4, cl2.companies[0].slices[0].rows.length);
+check("split sequential clamp: c2 gets remaining 1", cl2.companies[1].slices[0].rows.length === 1, cl2.companies[1].slices[0].rows.length);
+check("split sequential clamp: nothing left", cl2.remainder.length === 0, cl2.remainder);
+
+// --- mergeSlices: ناتج الشركة المدموجة يطابق دمج الشرائح عبر mergeWithMaps
+const planForSplit = autoMergePlan([a1, a2], opts);
+const spM = planSplit([a1, a2], [{ name: "co", merge: true, counts: [3, 2] }]);
+const mergedCo = mergeSlices([a1, a2], opts, planForSplit, spM.companies[0].slices);
+const pf1 = Object.assign({}, a1, { dataRows: a1.dataRows.slice(0, 3), empty: false });
+const pf2 = Object.assign({}, a2, { dataRows: a2.dataRows.slice(0, 2), empty: false });
+const expectedCo = mergeWithMaps([pf1, pf2], opts, planForSplit);
+check("merged-company headers match mergeWithMaps", mergedCo.headers.join("|") === expectedCo.headers.join("|"), mergedCo.headers);
+check("merged-company rows match mergeWithMaps", JSON.stringify(mergedCo.rows) === JSON.stringify(expectedCo.rows), [mergedCo.rows.length, expectedCo.rows.length]);
+check("merged-company row total = 3+2", mergedCo.rows.length === 5, mergedCo.rows.length);
+
+// --- sliceOwnColumns: الإخراج غير المدموج يحافظ على أعمدة الملف، والملف بلا رأس يبقى بلا رأس
+const own1 = sliceOwnColumns(a1, a1.dataRows.slice(0, 2), new Set());
+check("unmerged named keeps own headers", own1.headers.join("|") === a1.headers.join("|"), own1.headers);
+check("unmerged named row shape preserved", own1.rows.length === 2 && own1.rows[0].length === a1.headers.length, own1.rows[0]);
+const ownHl = sliceOwnColumns(hl1, hl1.dataRows, new Set());
+check("unmerged headerless has null headers", ownHl.headers === null, ownHl.headers);
+check("unmerged headerless keeps all columns", ownHl.rows[0].length === hl1.headers.length, ownHl.rows[0]);
+
+// --- حذف الأعمدة يُستبعد من المخرجات (المدموج وغير المدموج)
+const planDel = autoMergePlan([a1, a2], opts); // 5 أعمدة، آخرها "الهاتف"
+const delKey = planDel.finalCols[planDel.finalCols.length - 1];
+const filtered = filterDeletedColumns(planDel, new Set([delKey]));
+check("filterDeletedColumns drops header", !filtered.headers.includes("الهاتف") && filtered.headers.length === 4, filtered.headers);
+check("filterDeletedColumns shrinks every map", filtered.maps[0].length === 4 && filtered.maps[1].length === 4, filtered.maps.map((m) => m.length));
+const mergedDel = mergeWithMaps([a1, a2], opts, filtered);
+check("deleted column absent from merged output", !mergedDel.headers.includes("الهاتف") && mergedDel.rows[0].length === 4, mergedDel.headers);
+const ownDel = sliceOwnColumns(a1, a1.dataRows.slice(0, 2), new Set([1])); // احذف العمود 1 (البريد)
+check("unmerged excludes deleted source column", ownDel.headers.join("|") === "الاسم|المدينة|العمر" && ownDel.rows[0].length === 3, ownDel.headers);
+
+// --- crc32: متجه معروف
+const crcIn = Uint8Array.from("123456789", (c) => c.charCodeAt(0));
+check("crc32(\"123456789\") === 0xCBF43926", crc32(crcIn) === 0xcbf43926, crc32(crcIn).toString(16));
+
+// --- بنية ZIP: التواقيع + العلم UTF-8 + عدد السجلات
+const zEnc = new TextEncoder();
+const zEntries = [
+  { name: "شركة/merged.csv", data: zEnc.encode("a,b\r\n1,2") },
+  { name: "المتبقي/A.csv", data: zEnc.encode("x") },
+];
+const zip = buildZip(zEntries);
+check("zip starts with local header PK\\x03\\x04", zip[0] === 0x50 && zip[1] === 0x4b && zip[2] === 0x03 && zip[3] === 0x04, [zip[0], zip[1], zip[2], zip[3]]);
+check("zip local header sets UTF-8 flag (0x0800)", zip[6] === 0x00 && zip[7] === 0x08, [zip[6], zip[7]]);
+function findSig(buf, a, b, c, d) {
+  for (let i = buf.length - 4; i >= 0; i--) if (buf[i] === a && buf[i + 1] === b && buf[i + 2] === c && buf[i + 3] === d) return i;
+  return -1;
+}
+const centralAt = findSig(zip, 0x50, 0x4b, 0x01, 0x02);
+check("zip contains central directory signature PK\\x01\\x02", centralAt >= 0, centralAt);
+const eocdAt = findSig(zip, 0x50, 0x4b, 0x05, 0x06);
+check("zip contains EOCD signature PK\\x05\\x06", eocdAt >= 0, eocdAt);
+const totalEntries = zip[eocdAt + 10] | (zip[eocdAt + 11] << 8);
+const diskEntries = zip[eocdAt + 8] | (zip[eocdAt + 9] << 8);
+check("zip EOCD total entry count matches", totalEntries === zEntries.length, totalEntries);
+check("zip EOCD disk entry count matches", diskEntries === zEntries.length, diskEntries);
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
