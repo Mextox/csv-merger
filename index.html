@@ -6,7 +6,7 @@
 <title>دمج ملفات CSV — أداة احترافية بدون تخزين</title>
 <meta name="description" content="أداة احترافية لدمج ملفات CSV داخل المتصفح مع فحص التناقضات والأخطاء الشائعة — لا يُرفع أو يُخزَّن أي شيء.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧩</text></svg>">
-<link rel="stylesheet" href="style.css?v=3">
+<link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
 
@@ -89,7 +89,10 @@
   <section id="resultSection" class="card" hidden>
     <div class="card-head">
       <h2>الناتج المدموج</h2>
-      <button type="button" id="downloadBtn" class="btn btn-primary">⬇ تنزيل CSV المدموج</button>
+      <div class="head-actions">
+        <button type="button" id="splitToggleBtn" class="btn btn-ghost">✂ تقسيم حسب الشركات</button>
+        <button type="button" id="downloadBtn" class="btn btn-primary">⬇ تنزيل CSV المدموج</button>
+      </div>
     </div>
     <div id="resultStats" class="stats-row"></div>
     <div id="colorLegend" class="color-legend"></div>
@@ -97,6 +100,22 @@
       <table id="previewTable"></table>
     </div>
     <p id="previewNote" class="preview-note"></p>
+    <p class="preview-note">💡 اضغط ✕ فوق أي عمود لحذفه من الناتج والتقسيم — يعود بالضغط على "إعادة الضبط التلقائي".</p>
+  </section>
+
+  <!-- التقسيم حسب الشركات -->
+  <section id="splitSection" class="card" hidden>
+    <div class="card-head">
+      <h2>تقسيم الكروت حسب الشركات</h2>
+      <button type="button" id="splitAddBtn" class="btn btn-ghost btn-sm">+ إضافة شركة</button>
+    </div>
+    <p class="align-hint">لكل شركة اكتب اسمها وحدِّد كم كرت (صف) تأخذه من كل فئة (ملف). التوزيع تسلسلي من أعلى كل ملف: الشركة الأولى تأخذ أول الصفوف ثم التي تليها. فعِّل "دمج" لتجميع كروت الشركة في ملف واحد، أو اتركه لتحصل على ملف لكل فئة. الناتج ملف ZIP فيه مجلد لكل شركة ومجلد "المتبقي" لما لم يُوزَّع.</p>
+    <div id="companiesList" class="companies-list"></div>
+    <div id="splitRemaining" class="split-remaining"></div>
+    <div class="split-actions">
+      <button type="button" id="extractBtn" class="btn btn-primary">📦 استخراج ملف ZIP</button>
+    </div>
+    <div id="splitDialog" class="split-dialog" hidden></div>
   </section>
 
 </main>
@@ -108,6 +127,6 @@
   </div>
 </footer>
 
-<script src="app.js?v=3"></script>
+<script src="app.js?v=4"></script>
 </body>
 </html>
