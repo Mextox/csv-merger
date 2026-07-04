@@ -353,7 +353,7 @@ function crossFileChecks(files, opts) {
 
 /* ---------- الدمج ---------- */
 
-const POS_PREFIX = " pos_"; // مفتاح خاص للأعمدة الموضعية حتى لا يتصادم مع أسماء أعمدة حقيقية
+const POS_PREFIX = String.fromCharCode(0) + "pos_"; // مفتاح خاص للأعمدة الموضعية حتى لا يتصادم مع أسماء أعمدة حقيقية
 
 // تحدد أعمدة الناتج (المفاتيح + عناوين العرض) وهل يُكتب صف عناوين.
 // ok=false يعني تعذّر الدمج (لا توجد أعمدة مشتركة في وضع التقاطع).
@@ -540,6 +540,183 @@ function toCSV(headers, rows, delimiter) {
   return lines.join("\r\n");
 }
 
+/* =====================================================================
+ * التقسيم حسب الشركات + حذف الأعمدة + كاتب ZIP (كلها دوال نقيّة قابلة للاختبار)
+ * ===================================================================== */
+
+/* ---------- حذف أعمدة الناتج ---------- */
+
+// يزيل من الخطة أعمدة الناتج التي مفاتيحها ضمن deleted (Set أو مصفوفة مفاتيح finalCols).
+// يعيد خطة جديدة (finalCols/headers/maps) دون تعديل الأصل — تُستخدم للدمج والتنزيل والتقسيم.
+function filterDeletedColumns(plan, deleted) {
+  const del = deleted instanceof Set ? deleted : new Set(deleted || []);
+  const keep = [];
+  plan.finalCols.forEach((k, i) => { if (!del.has(k)) keep.push(i); });
+  return {
+    finalCols: keep.map((i) => plan.finalCols[i]),
+    headers: keep.map((i) => plan.headers[i]),
+    includeHeader: plan.includeHeader,
+    maps: (plan.maps || []).map((m) => keep.map((i) => m[i])),
+  };
+}
+
+// أعمدة ملف واحد بأعمدته الأصلية (للإخراج غير المدموج) مع استبعاد الأعمدة المحذوفة.
+// deletedSrcCols: مجموعة فهارس أعمدة هذا الملف التي حُذفت. الملفات بلا رأس تبقى بلا صف عناوين (headers = null).
+function sliceOwnColumns(file, rows, deletedSrcCols) {
+  const del = deletedSrcCols instanceof Set ? deletedSrcCols : new Set(deletedSrcCols || []);
+  const keep = [];
+  for (let i = 0; i < file.headers.length; i++) if (!del.has(i)) keep.push(i);
+  const headers = keep.map((i) => file.headers[i]);
+  const outRows = rows.map((r) => keep.map((i) => (r[i] == null ? "" : r[i])));
+  return { headers: file.hasHeader ? headers : null, rows: outRows };
+}
+
+/* ---------- توزيع الصفوف على الشركات ---------- */
+
+// توزيع تسلسلي من أعلى كل فئة (ملف): الشركة الأولى تأخذ أول N صف، الثانية التي تليها، إلخ.
+// files: [{ dataRows }]، companies: [{ name, merge, counts: number[] }] (counts[fileIndex] = عدد الصفوف).
+// يُقصّ ما يتجاوز المتاح تلقائيًا. يعيد شرائح لكل شركة + المتبقي غير المُوزَّع لكل فئة.
+function planSplit(files, companies) {
+  const cursors = files.map(() => 0);
+  const outCompanies = (companies || []).map((co) => {
+    const slices = [];
+    files.forEach((f, fi) => {
+      const avail = f.dataRows.length - cursors[fi];
+      const want = Math.max(0, Math.floor(Number((co.counts || [])[fi]) || 0));
+      const take = Math.min(want, avail);
+      if (take > 0) {
+        slices.push({ fileIndex: fi, rows: f.dataRows.slice(cursors[fi], cursors[fi] + take) });
+        cursors[fi] += take;
+      }
+    });
+    return { name: co.name, merge: !!co.merge, slices };
+  });
+  const remainder = [];
+  files.forEach((f, fi) => {
+    if (cursors[fi] < f.dataRows.length) {
+      remainder.push({ fileIndex: fi, rows: f.dataRows.slice(cursors[fi]) });
+    }
+  });
+  return { companies: outCompanies, remainder };
+}
+
+// يدمج شرائح شركة واحدة في ناتج واحد باستخدام نفس منطق الدمج (الخرائط + قواعد صف العناوين).
+// usable: الملفات القابلة للاستخدام بترتيبها، plan: خطة الأعمدة (بعد استبعاد المحذوف)، slices: [{ fileIndex, rows }].
+function mergeSlices(usable, opts, plan, slices) {
+  const byIndex = new Map();
+  (slices || []).forEach((s) => byIndex.set(s.fileIndex, s.rows));
+  const pseudo = usable.map((f, fi) =>
+    Object.assign({}, f, { dataRows: byIndex.get(fi) || [], empty: false })
+  );
+  return mergeWithMaps(pseudo, opts, plan);
+}
+
+/* ---------- كاتب ZIP (طريقة STORE بلا ضغط، بلا أي تبعيات) ---------- */
+
+// جدول CRC-32 (متعدد الحدود 0xEDB88320) يُبنى مرة واحدة ويُخزَّن.
+let CRC_TABLE = null;
+function crc32Table() {
+  if (CRC_TABLE) return CRC_TABLE;
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+    t[n] = c >>> 0;
+  }
+  CRC_TABLE = t;
+  return t;
+}
+
+// CRC-32 لمصفوفة بايتات (Uint8Array) — دالة نقيّة. crc32("123456789") === 0xCBF43926.
+function crc32(bytes) {
+  const t = crc32Table();
+  let c = 0xffffffff;
+  for (let i = 0; i < bytes.length; i++) c = t[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+// يبني أرشيف ZIP (Uint8Array) من entries = [{ name, data: Uint8Array }].
+// STORE فقط، مع رفع علم UTF-8 (bit 11 = 0x0800) لأن أسماء المجلدات/الملفات عربية.
+function buildZip(entries) {
+  const enc = new TextEncoder();
+  const u16 = (n) => [n & 0xff, (n >>> 8) & 0xff];
+  const u32 = (n) => { n = n >>> 0; return [n & 0xff, (n >>> 8) & 0xff, (n >>> 16) & 0xff, (n >>> 24) & 0xff]; };
+  const FLAG_UTF8 = 0x0800;
+  const DOS_DATE = 0x0021; // 1980-01-01، تاريخ ثابت صالح
+  const DOS_TIME = 0x0000;
+
+  const localParts = [];   // رؤوس الملفات المحلية + البيانات
+  const centralParts = []; // سجلات الفهرس المركزي
+  let offset = 0;
+
+  entries.forEach((e) => {
+    const nameBytes = enc.encode(e.name);
+    const data = e.data;
+    const crc = crc32(data);
+    const size = data.length;
+
+    const lh = [];
+    lh.push(...u32(0x04034b50));      // توقيع الرأس المحلي PK\x03\x04
+    lh.push(...u16(20));              // النسخة المطلوبة
+    lh.push(...u16(FLAG_UTF8));       // الأعلام العامة (UTF-8)
+    lh.push(...u16(0));               // طريقة الضغط = STORE
+    lh.push(...u16(DOS_TIME));
+    lh.push(...u16(DOS_DATE));
+    lh.push(...u32(crc));
+    lh.push(...u32(size));            // الحجم المضغوط
+    lh.push(...u32(size));            // الحجم الأصلي
+    lh.push(...u16(nameBytes.length));
+    lh.push(...u16(0));               // طول الحقل الإضافي
+    const localHeader = Uint8Array.from(lh);
+    localParts.push(localHeader, nameBytes, data);
+    const localOffset = offset;
+    offset += localHeader.length + nameBytes.length + size;
+
+    const ch = [];
+    ch.push(...u32(0x02014b50));      // توقيع الفهرس المركزي PK\x01\x02
+    ch.push(...u16(20));              // نسخة المُنشئ
+    ch.push(...u16(20));              // النسخة المطلوبة
+    ch.push(...u16(FLAG_UTF8));
+    ch.push(...u16(0));               // STORE
+    ch.push(...u16(DOS_TIME));
+    ch.push(...u16(DOS_DATE));
+    ch.push(...u32(crc));
+    ch.push(...u32(size));
+    ch.push(...u32(size));
+    ch.push(...u16(nameBytes.length));
+    ch.push(...u16(0));               // إضافي
+    ch.push(...u16(0));               // تعليق
+    ch.push(...u16(0));               // رقم القرص
+    ch.push(...u16(0));               // سمات داخلية
+    ch.push(...u32(0));               // سمات خارجية
+    ch.push(...u32(localOffset));     // إزاحة الرأس المحلي
+    centralParts.push(Uint8Array.from(ch), nameBytes);
+  });
+
+  let centralSize = 0;
+  centralParts.forEach((p) => { centralSize += p.length; });
+  const centralOffset = offset;
+
+  const eocd = [];
+  eocd.push(...u32(0x06054b50));      // توقيع نهاية الفهرس المركزي PK\x05\x06
+  eocd.push(...u16(0));               // رقم القرص
+  eocd.push(...u16(0));               // قرص بداية الفهرس
+  eocd.push(...u16(entries.length));  // عدد السجلات في هذا القرص
+  eocd.push(...u16(entries.length));  // إجمالي السجلات
+  eocd.push(...u32(centralSize));
+  eocd.push(...u32(centralOffset));
+  eocd.push(...u16(0));               // طول التعليق
+  const eocdArr = Uint8Array.from(eocd);
+
+  const total = offset + centralSize + eocdArr.length;
+  const out = new Uint8Array(total);
+  let pos = 0;
+  localParts.forEach((p) => { out.set(p, pos); pos += p.length; });
+  centralParts.forEach((p) => { out.set(p, pos); pos += p.length; });
+  out.set(eocdArr, pos);
+  return out;
+}
+
 /* ---------- قراءة الملف مع اكتشاف الترميز ---------- */
 
 async function readFileSmart(file) {
@@ -597,7 +774,8 @@ if (typeof document !== "undefined") {
   /* ---------- حالة محاذاة الأعمدة (خرائط قابلة للتعديل بالسحب) ---------- */
 
   // finalCols/headers/maps بالترتيب الحالي؛ maps[fi][outputPos] = فهرس عمود الملف أو null.
-  const align = { signature: "", ok: false, includeHeader: true, finalCols: [], headers: [], maps: [] };
+  // deleted = مجموعة مفاتيح أعمدة الناتج المحذوفة (تُستبعد من التنزيل والتقسيم، وتعود عند إعادة الضبط).
+  const align = { signature: "", ok: false, includeHeader: true, finalCols: [], headers: [], maps: [], deleted: new Set() };
 
   // بصمة تعتمد على البُنية التي تحدد شكل الأعمدة؛ أي تغيّر جوهري يعيد بناء الخرائط بأمان
   function alignSignature(analyzed, opts) {
@@ -620,7 +798,75 @@ if (typeof document !== "undefined") {
     align.finalCols = plan.finalCols.slice();
     align.headers = plan.headers.slice();
     align.maps = plan.maps.map((m) => m.slice());
+    align.deleted = new Set(); // تغيّر البُنية يُعيد كل الأعمدة المحذوفة
     align.active = false; // لا يوجد تخصيص يدوي بعد
+  }
+
+  // فهارس أعمدة الناتج غير المحذوفة (بترتيبها الحالي)
+  function keptIndices() {
+    const out = [];
+    align.finalCols.forEach((k, i) => { if (!align.deleted.has(k)) out.push(i); });
+    return out;
+  }
+
+  // خطة فعّالة = خطة المحاذاة الحالية بعد استبعاد الأعمدة المحذوفة (للدمج والتنزيل والتقسيم)
+  function effectiveAlign() {
+    return filterDeletedColumns(align, align.deleted);
+  }
+
+  // مجموعة فهارس أعمدة الملف fi التي تقابل أعمدة ناتج محذوفة (للإخراج غير المدموج)
+  function deletedSrcColsFor(fi) {
+    const set = new Set();
+    align.finalCols.forEach((k, p) => {
+      if (align.deleted.has(k)) {
+        const src = align.maps[fi] ? align.maps[fi][p] : null;
+        if (src != null) set.add(src);
+      }
+    });
+    return set;
+  }
+
+  // حذف عمود ناتج (بفهرسه الكامل داخل align.finalCols)
+  function deleteOutputColumn(fullIdx) {
+    const key = align.finalCols[fullIdx];
+    if (key == null) return;
+    align.deleted.add(key);
+    align.active = true;
+    render();
+  }
+
+  /* ---------- حالة التقسيم حسب الشركات ---------- */
+
+  // كل شركة: { name, merge, counts: number[] } — counts[usableIndex] عدد الصفوف من كل فئة.
+  const split = { open: false, companies: [], dialog: null };
+
+  function addCompany() {
+    split.companies.push({ name: "", merge: true, counts: [] });
+    render();
+  }
+  function removeCompany(i) {
+    split.companies.splice(i, 1);
+    render();
+  }
+  // يضمن أن طول counts يساوي عدد الفئات القابلة للاستخدام
+  function normalizeCompanies(nUsable) {
+    return split.companies.map((co) => {
+      const counts = [];
+      for (let i = 0; i < nUsable; i++) counts.push(Math.max(0, Math.floor(Number(co.counts[i]) || 0)));
+      return { name: co.name, merge: !!co.merge, counts };
+    });
+  }
+  // معاينة التوزيع الحية: المتاح لكل شركة قبل دورها + المتبقي لكل فئة بعد كل الشركات
+  function splitView(usable, companies) {
+    const cursors = usable.map(() => 0);
+    const rows = companies.map((co) => {
+      const avail = usable.map((f, fi) => f.dataRows.length - cursors[fi]);
+      const take = usable.map((f, fi) => Math.min(Math.max(0, Math.floor(Number(co.counts[fi]) || 0)), avail[fi]));
+      take.forEach((t, fi) => { cursors[fi] += t; });
+      return { avail, take };
+    });
+    const remaining = usable.map((f, fi) => f.dataRows.length - cursors[fi]);
+    return { rows, remaining };
   }
 
   function moveInArray(arr, from, to) {
@@ -740,6 +986,7 @@ if (typeof document !== "undefined") {
     $("alignSection").hidden = !has;
     $("issuesSection").hidden = !has;
     $("resultSection").hidden = !has;
+    $("splitSection").hidden = !has || !split.open;
     if (!has) { lastMerge = null; align.signature = ""; return; }
 
     const opts = getOptions();
@@ -756,10 +1003,10 @@ if (typeof document !== "undefined") {
     // أعِد بناء خرائط المحاذاة إن تغيّرت البُنية جوهريًا، وإلا احتفظ بتعديلات المستخدم
     syncAlign(analyzed, opts);
 
-    // الخطة التلقائية (لرسائل الفحص المتعلقة بالأعمدة)، والدمج بالخرائط الحالية (قد تكون معدّلة)
+    // الخطة التلقائية (لرسائل الفحص المتعلقة بالأعمدة)، والدمج بالخرائط الحالية بعد استبعاد المحذوف
     const plan = autoMergePlan(analyzed, opts);
     const merge = align.ok
-      ? mergeWithMaps(analyzed, opts, align)
+      ? mergeWithMaps(analyzed, opts, effectiveAlign())
       : { headers: [], rows: [], sources: [], issues: [], droppedDupes: 0, crossDupes: 0, includeHeader: align.includeHeader };
 
     const allIssues = [
@@ -776,6 +1023,7 @@ if (typeof document !== "undefined") {
     renderAlign(analyzed, colors);
     renderIssues(allIssues);
     renderResult(merge, analyzed, allIssues, colors);
+    renderSplit(analyzed, colors);
   }
 
   function renderFiles(analyzed, colors) {
@@ -889,23 +1137,38 @@ if (typeof document !== "undefined") {
       stats.appendChild(d);
     });
 
-    // معاينة الجدول — رؤوس أعمدة الناتج قابلة للسحب لإعادة الترتيب، وكل صف بلون ملفه المصدر
+    // معاينة الجدول — رؤوس أعمدة الناتج قابلة للسحب لإعادة الترتيب وللحذف، وكل صف بلون ملفه المصدر
     const table = $("previewTable");
     table.innerHTML = "";
     if (merge.headers.length > 0) {
-      const draggableCount = align.finalCols.length; // العمود الأخير (الملف المصدر) غير قابل للسحب
+      const keep = keptIndices();            // فهارس align الكاملة المقابلة لأعمدة المعاينة
+      const draggableCount = keep.length;    // العمود الأخير (الملف المصدر) غير قابل للسحب أو الحذف
       const thead = document.createElement("thead");
       const trh = document.createElement("tr");
       const headerCells = [];
       merge.headers.forEach((h, ci) => {
         const th = document.createElement("th");
-        th.textContent = h;
         if (!merge.includeHeader && ci < draggableCount) th.classList.add("th-generic");
         if (ci < draggableCount) {
+          const fullIdx = keep[ci];
           th.classList.add("th-draggable");
-          th.dataset.col = ci;
+          th.dataset.col = fullIdx; // فهرس كامل داخل align.finalCols
           th.title = "اسحب لإعادة ترتيب أعمدة الناتج";
+          const label = document.createElement("span");
+          label.textContent = h;
+          const del = document.createElement("button");
+          del.type = "button";
+          del.className = "col-del";
+          del.textContent = "✕";
+          del.title = "حذف هذا العمود من الناتج والتقسيم";
+          del.draggable = false;
+          del.addEventListener("click", (e) => { e.stopPropagation(); deleteOutputColumn(fullIdx); });
+          del.addEventListener("mousedown", (e) => e.stopPropagation());
+          th.appendChild(label);
+          th.appendChild(del);
           headerCells.push(th);
+        } else {
+          th.textContent = h;
         }
         trh.appendChild(th);
       });
@@ -970,7 +1233,8 @@ if (typeof document !== "undefined") {
     const wrap = $("alignTables");
     wrap.innerHTML = "";
     const usable = analyzed.filter((a) => !a.empty);
-    const N = align.finalCols.length;
+    const keep = keptIndices();          // أعمدة الناتج غير المحذوفة (فهارس align الكاملة)
+    const N = keep.length;
     // لا معنى للمحاذاة بلا ملفات أو بلا أعمدة ناتج
     if (usable.length === 0 || N === 0) { $("alignSection").hidden = true; return; }
     $("alignSection").hidden = false;
@@ -978,7 +1242,7 @@ if (typeof document !== "undefined") {
 
     const usableColors = usableColorsOf(analyzed, colors);
 
-    // صف مرجعي: أعمدة الناتج (الأعمدة المتناظرة تظهر فوق جداول الملفات)
+    // صف مرجعي: أعمدة الناتج (الأعمدة المتناظرة تظهر فوق جداول الملفات) مع زر حذف لكل عمود
     const refBlock = document.createElement("div");
     refBlock.className = "align-block";
     const refLabel = document.createElement("div");
@@ -989,9 +1253,18 @@ if (typeof document !== "undefined") {
     refTable.className = "align-table align-ref";
     const refHead = document.createElement("thead");
     const refTr = document.createElement("tr");
-    align.headers.forEach((h) => {
+    keep.forEach((fullIdx) => {
       const th = document.createElement("th");
-      th.textContent = h;
+      const label = document.createElement("span");
+      label.textContent = align.headers[fullIdx];
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "col-del";
+      del.textContent = "✕";
+      del.title = "حذف هذا العمود من الناتج والتقسيم";
+      del.addEventListener("click", (e) => { e.stopPropagation(); deleteOutputColumn(fullIdx); });
+      th.appendChild(label);
+      th.appendChild(del);
       refTr.appendChild(th);
     });
     refHead.appendChild(refTr);
@@ -1021,31 +1294,31 @@ if (typeof document !== "undefined") {
       const thead = document.createElement("thead");
       const tr = document.createElement("tr");
       const cells = [];
-      for (let p = 0; p < N; p++) {
+      keep.forEach((fullIdx) => {
         const th = document.createElement("th");
-        th.dataset.col = p;
+        th.dataset.col = fullIdx; // فهرس كامل داخل الخريطة
         th.classList.add("th-draggable");
         th.title = "اسحب لتغيير العمود الذي يقع تحت هذا العمود من الناتج";
-        const srcIdx = map[p];
+        const srcIdx = map[fullIdx];
         if (srcIdx == null) { th.textContent = "—"; th.classList.add("align-empty-col"); }
         else th.textContent = f.hasHeader ? f.headers[srcIdx] : `عمود ${srcIdx + 1}`;
         tr.appendChild(th);
         cells.push(th);
-      }
+      });
       thead.appendChild(tr);
       t.appendChild(thead);
 
       const tbody = document.createElement("tbody");
       f.dataRows.slice(0, 3).forEach((raw) => {
         const dtr = document.createElement("tr");
-        for (let p = 0; p < N; p++) {
+        keep.forEach((fullIdx) => {
           const td = document.createElement("td");
-          const srcIdx = map[p];
+          const srcIdx = map[fullIdx];
           const v = srcIdx == null ? "" : (raw[srcIdx] == null ? "" : raw[srcIdx]);
           if (String(v).trim() === "") { td.className = "empty-cell"; td.textContent = "—"; }
           else { td.textContent = v; td.title = v; }
           dtr.appendChild(td);
-        }
+        });
         tbody.appendChild(dtr);
       });
       t.appendChild(tbody);
@@ -1067,6 +1340,248 @@ if (typeof document !== "undefined") {
     const a = document.createElement("a");
     a.href = url;
     a.download = "merged.csv";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  /* ---------- التقسيم حسب الشركات ---------- */
+
+  function renderSplit(analyzed, colors) {
+    const host = $("companiesList");
+    if (!split.open) { host.innerHTML = ""; return; }
+    host.innerHTML = "";
+    const usable = analyzed.filter((a) => !a.empty);
+    const usableColors = usableColorsOf(analyzed, colors);
+    const remainEl = $("splitRemaining");
+
+    if (usable.length === 0) {
+      host.textContent = "لا توجد ملفات قابلة للتقسيم.";
+      remainEl.innerHTML = "";
+      $("extractBtn").disabled = true;
+      return;
+    }
+    $("extractBtn").disabled = false;
+
+    const inputs = []; // inputs[companyIdx][categoryIdx]
+
+    // تحديث العرض الحي: المتاح لكل مدخل + ملخص المتبقي لكل فئة — دون إعادة بناء الحقول (حفاظًا على التركيز)
+    function updateLive() {
+      const companies = normalizeCompanies(usable.length);
+      const view = splitView(usable, companies);
+      view.rows.forEach((r, ci) => {
+        r.avail.forEach((av, fi) => {
+          const inp = inputs[ci] && inputs[ci][fi];
+          if (inp) inp.max = String(av);
+        });
+      });
+      remainEl.innerHTML = "";
+      const totalRemain = view.remaining.reduce((a, b) => a + b, 0);
+      const title = document.createElement("span");
+      title.className = "split-remain-title";
+      title.textContent = totalRemain > 0
+        ? `المتبقي غير المُوزَّع (${totalRemain} صف): `
+        : "تم توزيع كل الصفوف على الشركات ✓";
+      remainEl.appendChild(title);
+      if (totalRemain > 0) {
+        usable.forEach((f, fi) => {
+          if (view.remaining[fi] <= 0) return;
+          const chip = document.createElement("span");
+          chip.className = "cat-chip";
+          chip.style.setProperty("--file-color", usableColors[fi].solid);
+          chip.textContent = `${f.name}: ${view.remaining[fi]}`;
+          remainEl.appendChild(chip);
+        });
+      }
+    }
+
+    split.companies.forEach((co, ci) => {
+      inputs[ci] = [];
+      if (!Array.isArray(co.counts)) co.counts = [];
+      const card = document.createElement("div");
+      card.className = "company-card";
+
+      const head = document.createElement("div");
+      head.className = "company-head";
+
+      const nameInp = document.createElement("input");
+      nameInp.type = "text";
+      nameInp.className = "company-name";
+      nameInp.placeholder = `اسم الشركة ${ci + 1}`;
+      nameInp.value = co.name;
+      nameInp.addEventListener("input", () => { co.name = nameInp.value; });
+
+      const mergeLabel = document.createElement("label");
+      mergeLabel.className = "opt-check company-merge";
+      const mergeCb = document.createElement("input");
+      mergeCb.type = "checkbox";
+      mergeCb.checked = co.merge;
+      mergeCb.addEventListener("change", () => { co.merge = mergeCb.checked; });
+      mergeLabel.appendChild(mergeCb);
+      mergeLabel.appendChild(document.createTextNode(" دمج في ملف واحد"));
+
+      const rm = document.createElement("button");
+      rm.type = "button";
+      rm.className = "company-remove";
+      rm.textContent = "✕ حذف الشركة";
+      rm.title = "حذف هذه الشركة";
+      rm.addEventListener("click", () => removeCompany(ci));
+
+      head.appendChild(nameInp);
+      head.appendChild(mergeLabel);
+      head.appendChild(rm);
+      card.appendChild(head);
+
+      const grid = document.createElement("div");
+      grid.className = "cat-grid";
+      usable.forEach((f, fi) => {
+        const cell = document.createElement("div");
+        cell.className = "cat-cell";
+        cell.style.setProperty("--file-color", usableColors[fi].solid);
+
+        const nm = document.createElement("span");
+        nm.className = "cat-name";
+        nm.textContent = f.name;
+        const sub = document.createElement("span");
+        sub.className = "cat-sub";
+        sub.textContent = `${f.dataRows.length} صف متاح`;
+
+        const inp = document.createElement("input");
+        inp.type = "number";
+        inp.min = "0";
+        inp.className = "cat-input";
+        inp.value = String(co.counts[fi] != null ? co.counts[fi] : 0);
+        inp.addEventListener("input", () => {
+          co.counts[fi] = Math.max(0, Math.floor(Number(inp.value) || 0));
+          updateLive();
+        });
+        inputs[ci][fi] = inp;
+
+        cell.appendChild(nm);
+        cell.appendChild(sub);
+        cell.appendChild(inp);
+        grid.appendChild(cell);
+      });
+      card.appendChild(grid);
+      host.appendChild(card);
+    });
+    updateLive();
+  }
+
+  // حوار داخل الصفحة للسؤال عن كيفية استخراج المتبقي
+  function showRemainderDialog(totalRemain, cb) {
+    const dlg = $("splitDialog");
+    dlg.innerHTML = "";
+    dlg.hidden = false;
+    const msg = document.createElement("p");
+    msg.className = "dialog-msg";
+    msg.textContent = `لا تزال هناك ${totalRemain} صف لم تُحدَّد لها شركة — هل تريد استخراج المتبقي مدموجًا في ملف واحد أم بدون دمج؟`;
+    const row = document.createElement("div");
+    row.className = "dialog-actions";
+    const mk = (text, cls, val) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = cls;
+      b.textContent = text;
+      b.addEventListener("click", () => { dlg.hidden = true; cb(val); });
+      return b;
+    };
+    row.appendChild(mk("مدموجًا في ملف واحد", "btn btn-primary", "merge"));
+    row.appendChild(mk("بدون دمج (ملف لكل فئة)", "btn btn-ghost", "separate"));
+    row.appendChild(mk("إلغاء", "btn btn-ghost", null));
+    dlg.appendChild(msg);
+    dlg.appendChild(row);
+    dlg.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  // يحلّل الحالة الحالية (نفس تحليل render) — لاستخدامه عند الاستخراج
+  function analyzeCurrent(opts) {
+    return state.files.map((f) => {
+      const a = analyzeFile(f.name, f.text, opts, f.hasHeaderOverride);
+      a.size = f.size;
+      return a;
+    });
+  }
+
+  function doExtract() {
+    const opts = getOptions();
+    const analyzed = analyzeCurrent(opts);
+    const usable = analyzed.filter((a) => !a.empty);
+    if (usable.length === 0) { alert("لا توجد ملفات قابلة للتقسيم."); return; }
+    const companies = normalizeCompanies(usable.length);
+    const view = splitView(usable, companies);
+    const totalRemain = view.remaining.reduce((a, b) => a + b, 0);
+    if (totalRemain > 0) {
+      showRemainderDialog(totalRemain, (mode) => { if (mode) buildAndDownloadZip(mode); });
+    } else {
+      buildAndDownloadZip("merge"); // لا يوجد متبقٍ — الوضع غير مؤثر
+    }
+  }
+
+  function buildAndDownloadZip(remainderMode) {
+    const opts = getOptions();
+    const analyzed = analyzeCurrent(opts);
+    const usable = analyzed.filter((a) => !a.empty);
+    const effPlan = effectiveAlign();
+    const companies = normalizeCompanies(usable.length);
+    const plan = planSplit(usable, companies);
+
+    const enc = new TextEncoder();
+    const BOM = String.fromCharCode(0xFEFF);
+    const entries = [];
+    const usedFolders = new Set();
+
+    function folderName(raw, fallback) {
+      let n = (raw || "").trim().replace(/[\/\\:*?"<>|\x00-\x1f]/g, "-");
+      if (!n) n = fallback;
+      const base = n;
+      let k = 2;
+      while (usedFolders.has(n)) n = `${base} (${k++})`;
+      usedFolders.add(n);
+      return n;
+    }
+    function addCSV(path, headers, rows) {
+      const csv = toCSV(headers, rows, ",");
+      entries.push({ name: path, data: enc.encode(BOM + csv) });
+    }
+    function addUnmerged(folder, slices) {
+      slices.forEach((s) => {
+        const f = usable[s.fileIndex];
+        const own = sliceOwnColumns(f, s.rows, deletedSrcColsFor(s.fileIndex));
+        addCSV(`${folder}/${f.name}`, own.headers, own.rows);
+      });
+    }
+
+    plan.companies.forEach((co, i) => {
+      if (co.slices.length === 0) return; // لم تُخصَّص أي صفوف لهذه الشركة
+      const folder = folderName(co.name, `شركة ${i + 1}`);
+      if (co.merge) {
+        const m = mergeSlices(usable, opts, effPlan, co.slices);
+        addCSV(`${folder}/merged.csv`, m.includeHeader ? m.headers : null, m.rows);
+      } else {
+        addUnmerged(folder, co.slices);
+      }
+    });
+
+    if (plan.remainder.length > 0) {
+      const folder = folderName("المتبقي", "المتبقي");
+      if (remainderMode === "merge") {
+        const m = mergeSlices(usable, opts, effPlan, plan.remainder);
+        addCSV(`${folder}/merged.csv`, m.includeHeader ? m.headers : null, m.rows);
+      } else {
+        addUnmerged(folder, plan.remainder);
+      }
+    }
+
+    if (entries.length === 0) { alert("لا توجد صفوف للاستخراج — حدِّد عدد الصفوف لكل شركة."); return; }
+
+    const zip = buildZip(entries);
+    const blob = new Blob([zip], { type: "application/zip" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "split.zip";
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -1130,12 +1645,22 @@ if (typeof document !== "undefined") {
   ["optColumnMode", "optSkipEmpty", "optDropDupes", "optCaseInsensitive", "optAddSource"]
     .forEach((id) => $(id).addEventListener("change", render));
 
-  $("clearBtn").addEventListener("click", () => { state.files = []; render(); });
+  $("clearBtn").addEventListener("click", () => { state.files = []; split.open = false; split.companies = []; render(); });
   $("alignResetBtn").addEventListener("click", resetAlign);
   $("downloadBtn").addEventListener("click", download);
+
+  // التقسيم حسب الشركات
+  $("splitToggleBtn").addEventListener("click", () => {
+    split.open = !split.open;
+    if (split.open && split.companies.length === 0) split.companies.push({ name: "", merge: true, counts: [] });
+    render();
+    if (split.open) $("splitSection").scrollIntoView({ behavior: "smooth" });
+  });
+  $("splitAddBtn").addEventListener("click", addCompany);
+  $("extractBtn").addEventListener("click", doExtract);
 }
 
 /* تصدير للاختبار في Node — لا تأثير له داخل المتصفح */
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { parseCSV, detectDelimiter, classifyValue, detectHasHeader, analyzeFile, crossFileChecks, buildMerge, toCSV, csvEscape, planColumns, defaultFileMap, autoMergePlan, mergeWithMaps };
+  module.exports = { parseCSV, detectDelimiter, classifyValue, detectHasHeader, analyzeFile, crossFileChecks, buildMerge, toCSV, csvEscape, planColumns, defaultFileMap, autoMergePlan, mergeWithMaps, filterDeletedColumns, sliceOwnColumns, planSplit, mergeSlices, crc32, buildZip };
 }
