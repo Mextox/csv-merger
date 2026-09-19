@@ -20,9 +20,41 @@
 
 | الأداة | الحالة |
 |---|---|
+| 📥 استيراد كروت المورد (ملف إعداد لكل شركة) | متاحة |
 | 🧩 الدمج والتقسيم | متاحة |
-| 📥 استيراد كروت المورد (ملفات إعداد لكل شركة) | قيد البناء |
+| ⚙️ الإعدادات وحزمة الإعدادات | متاحة |
 | 🔢 أدوات السيريال، ↩️ الترجيع، 🧾 الفواتير والتقارير | مراحل لاحقة |
+
+## استيراد كروت المورد
+
+يحوّل ملفات الموردين (Excel أو CSV أو TXT من نوع Batch) إلى الصيغة الموحدة
+`الرقم السري, السيريال, كود الشركة, كود الفئة` — بدل سكربت منفصل لكل شركة، لكل شركة **ملف إعداد** يصف:
+
+- **الأعمدة** بالاسم (مع أسماء بديلة) ثم بالرقم، والبحث عن صف العناوين حتى لو كانت فوقه صفوف عنوان.
+- **مصدر الشركة والفئة:** عمود، اسم الملف، اسم الورقة (مع تصحيح الأخطاء الإملائية)، رأس ملف Batch، ثابت، أو سؤال عند الاستيراد.
+- **القواعد:** تعبئة الفراغ من فوق، الأرقام فقط، إكمال بأصفار، دمج حقلين، نسخ، استبدال، جدول تحويل، بادئة حسب اسم الملف.
+- **الإخراج:** ترتيب الأعمدة، نمط اسم الملف (`{company}` `{category}` `{part}` `{source}` `{date}`…)، ملف لكل فئة، التقسيم إلى أجزاء، الفاصل، BOM، نهاية السطر.
+
+**التعرّف التلقائي:** عند إسقاط ملف تُقارن عناوينه واسمه وأسماء أوراقه بملفات الإعداد ويُختار الأنسب (مع نسبة التأكد). ملف غير معروف ← **معالج شركة جديدة** يخمّن الأعمدة ويعرض معاينة حية.
+
+**الفحوص قبل التنزيل** — الأخطاء تمنع التنزيل، والتحذيرات تتطلب التأكيد:
+
+| الخطأ | المعنى |
+|---|---|
+| رقم فقد خاناته | رقم محفوظ في Excel كعدد (صيغة علمية أو أكثر من 15 رقمًا) |
+| رقم سري أو سيريال مكرر | داخل الملف أو بين ملفات الدفعة |
+| حقل فارغ، فئة أو شركة بلا كود | |
+| ملف Batch ناقص | غياب `[BEGIN]`/`[END]` أو عدد الكروت ≠ `Quantity` |
+
+والتحذيرات: عمود حُدد بالرقم لأن اسمه تغيّر، طول مخالف، حروف داخل الرقم، رقم منسّق كتاريخ، ملف مستورد مرتين. وفي النهاية سطر مطابقة: **الصفوف المقروءة = الكروت المكتوبة + الصفوف الفارغة**.
+
+النتيجة تُنزَّل (CSV أو ZIP بمجلد لكل شركة) أو تُرسل إلى **سلة العمل** لتنتقل إلى الدمج والتقسيم مباشرة. السلة في الذاكرة فقط — لا تُحفظ الكروت أبدًا.
+
+## الإعدادات وحزمة الإعدادات
+
+- ملفات الإعداد تُحفظ في المتصفح (IndexedDB) مع اسم الجهاز وتاريخ كل تعديل، ويُحرَّر كل منها بنموذج أو JSON مع تحقّق قبل الحفظ.
+- **حزمة الإعدادات:** ملف JSON يُصدَّر من جهاز ويُستورد في آخر للمشاركة والنسخ الاحتياطي. الاستيراد يعرض الفروق (جديد، مطابق، الوارد أحدث، المحلي أحدث) ولا يحذف شيئًا.
+- تنبيه في الرئيسية إذا مرّ أسبوع على تعديلات لم تُحفظ في نسخة احتياطية.
 
 ## أداة الدمج والتقسيم
 
@@ -80,12 +112,17 @@
 
 | المسار | المحتوى |
 |---|---|
+| `js/core/text.js` | تطبيع النصوص والأرقام (الأرقام العربية، حذف ‎.0‎، فقد الدقة) |
 | `js/core/csv.js` | تحليل CSV واكتشاف الترميز والفاصل، تحليل الملف، الفحوص بين الملفات، كتابة CSV |
 | `js/core/merge.js` | خطة الأعمدة والدمج، حذف الأعمدة، خطة التقسيم على الشركات |
 | `js/core/zip.js` | كاتب وقارئ ZIP بلا مكتبات |
-| `js/core/xlsx.js` | قارئ Excel (.xlsx/.xlsm) |
-| `js/tools/*.js` | واجهة كل أداة |
-| `js/app/*.js` | التنقّل، العمل بدون نت، رقم الإصدار |
+| `js/core/xlsx.js` | قارئ Excel (.xlsx/.xlsm) مع علامات فقد الدقة والتاريخ |
+| `js/core/batchtxt.js` | قارئ ملفات Batch النصية |
+| `js/core/profiles.js` | ملفات إعدادات الشركات: التحقق، التعرّف، القراءة، القواعد |
+| `js/core/cards.js` | الكرت الموحد: الأكواد، الفحوص، ملفات الإخراج، المطابقة |
+| `js/core/settings-pack.js` | حزمة الإعدادات: تصدير، قراءة، مقارنة |
+| `js/app/*.js` | الحفظ (IndexedDB)، سلة العمل، مكوّنات الواجهة، التنقّل، العمل بدون نت، الإصدار |
+| `js/tools/*.js` | واجهة كل أداة (الرئيسية، الاستيراد، المعالج، الدمج، الإعدادات) |
 | `sw.js` | Service Worker |
 | `tests/` | الاختبارات |
 
@@ -116,7 +153,7 @@ node scripts/smoke.js http://localhost:8000/   # فحص حي في Chrome (Node �
 
 **Tamim Ops** — a single operations dashboard for processing card files entirely in the browser. It works offline as an installable PWA, uploads and stores nothing, and has no dependencies or build step.
 
-Current tool: **Merge & Split** — merge CSV/Excel files with smart consistency checks (schema differences, stacked tables, ragged rows, type outliers, duplicates, encoding issues, headerless files) and split rows across companies into a ZIP. Upcoming: supplier card import with per-company profiles, serial tools, returns, invoices and reports.
+Tools: **Supplier card import** — converts supplier Excel/CSV/Batch-TXT files into one unified format using a declarative per-company *profile* (column mapping by name then position, header-row search, company/category sources, a small rule set, output naming/chunking), with auto-detection, a new-company wizard, and blocking checks (precision loss in Excel numbers, duplicates, empty fields, missing codes, batch quantity mismatch) plus an input/output reconciliation. **Merge & Split** — merge CSV/Excel files with smart consistency checks and split rows across companies into a ZIP. **Settings** — profiles stored in IndexedDB and shared between devices through an exported settings pack with a per-item diff on import. Upcoming: serial tools, returns, invoices and reports.
 
 Run tests with `node tests/run.js`; live browser check with `node scripts/smoke.js <url>`.
 
