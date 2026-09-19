@@ -1,5 +1,5 @@
 "use strict";
-const { parseCSV, detectDelimiter, classifyValue, detectHasHeader, analyzeFile, crossFileChecks, buildMerge, toCSV, autoMergePlan, mergeWithMaps } = require("./app.js");
+const { parseCSV, detectDelimiter, classifyValue, detectHasHeader, analyzeFile, crossFileChecks, buildMerge, toCSV, autoMergePlan, mergeWithMaps } = require("./helpers/core-all.js");
 
 let passed = 0, failed = 0;
 function check(name, cond, extra) {
@@ -217,7 +217,7 @@ check("headerless swap other file untouched", mHlSwap.rows[2][0] === "حسن", m
 // =====================================================================
 // التقسيم حسب الشركات + حذف الأعمدة + كاتب ZIP
 // =====================================================================
-const { filterDeletedColumns, sliceOwnColumns, planSplit, mergeSlices, crc32, buildZip } = require("./app.js");
+const { filterDeletedColumns, sliceOwnColumns, planSplit, mergeSlices, crc32, buildZip } = require("./helpers/core-all.js");
 
 // --- planSplit: توزيع تسلسلي عبر شركتين + حساب المتبقي
 const fA = { name: "A.csv", hasHeader: true, headers: ["x"], dataRows: [["a1"], ["a2"], ["a3"], ["a4"], ["a5"]] };
@@ -311,7 +311,7 @@ const {
   parseXlsx, parseZipEntries, parseSharedStrings, parseSheet, parseStyles,
   colRefToIndex, classifyNumFmt, excelSerialToText, decodeXml, trimTrailingEmpty,
   xlsxSheetsToFiles, analyzeRows,
-} = require("./app.js");
+} = require("./helpers/core-all.js");
 const zlib = require("zlib");
 
 const XENC = new TextEncoder();
@@ -549,7 +549,7 @@ async function runExcelTests() {
 
 // --- csvEntryName: أسماء ملفات الأرشيف تُجبر دائمًا على الامتداد .csv
 {
-  const { csvEntryName } = require("./app.js");
+  const { csvEntryName } = require("./helpers/core-all.js");
   check("csvEntryName keeps csv", csvEntryName("عملاء.csv") === "عملاء.csv", csvEntryName("عملاء.csv"));
   check("csvEntryName xlsx -> csv", csvEntryName("45.xlsx") === "45.csv", csvEntryName("45.xlsx"));
   check("csvEntryName xlsm -> csv", csvEntryName("ماكرو.XLSM") === "ماكرو.csv", csvEntryName("ماكرو.XLSM"));
