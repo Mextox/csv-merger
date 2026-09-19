@@ -84,6 +84,21 @@ const src = (sheets, fileName) => ({ fileName: fileName || "ملف.xlsx", sheets
   const r4 = P.rankProfiles([a, c], { fileName: "f.xlsx", headers: ["PIN", "SN", "Value"], sheetNames: [] });
   eq("tie at top = manual", r4.decision, "manual");
   eq("rank empty list", P.rankProfiles([], { fileName: "x", headers: [], sheetNames: [] }).decision, "manual");
+  // تساوي الدرجة: الأكثر تحديدًا (عناوين مطابقة أكثر) يفوز
+  const three = profile({ id: "three", detect: { headers: ["PIN", "SN", "Value"], fileName: [], sheetNames: [] } });
+  const eight = profile({ id: "eight", detect: { headers: ["Series", "SN", "PIN", "Username", "Password", "Value", "Expiration", "Used"], fileName: [], sheetNames: [] } });
+  const r5 = P.rankProfiles([three, eight], { fileName: "f.xlsx", headers: ["Series", "SN", "PIN", "Username", "Password", "Value", "Expiration", "Used"], sheetNames: [] });
+  eq("more specific profile wins a score tie", [r5.decision, r5.ranked[0].profile.id], ["auto", "eight"]);
+}
+
+/* ---------- معلومات التعرّف ---------- */
+{
+  const s = (rows) => ({ fileName: "a.xlsx", sheets: [{ sheetName: "S", rows }] });
+  eq("fileInfo skips title rows", P.fileInfo(s([["فاتورة 5"], [], ["PIN", "SN"], ["1", "2"]])).headers, ["PIN", "SN"]);
+  eq("fileInfo header on first row", P.fileInfo(s([["PIN", "SN"], ["1", "2"]])).headers, ["PIN", "SN"]);
+  eq("fileInfo headerless", P.fileInfo(s([["1", "2"], ["3", "4"]])).headers, null);
+  eq("fileInfo data-first file stays headerless", P.fileInfo(s([["1", "2"], ["PIN", "SN"]])).headers, null);
+  eq("fileInfo batch", P.fileInfo({ fileName: "x.txt", batch: {} }), { fileName: "x.txt", headers: null, sheetNames: [] });
 }
 
 /* ---------- تحديد الأعمدة ---------- */
@@ -119,6 +134,16 @@ const src = (sheets, fileName) => ({ fileName: fileName || "ملف.xlsx", sheets
   const r = P.applyProfile(profile(), src([sheet(rows)]), {});
   check("COLUMN_BY_INDEX warning", codes(r.issues).includes("COLUMN_BY_INDEX"), r.issues);
   eq("still reads by index", [r.records[0].pin, r.records[0].serial], ["P1", "S1"]);
+}
+{
+  // صف العناوين ليس الأول: فاتورة فوقها عنوان وتاريخ
+  const rows = [["فاتورة رقم 55"], ["التاريخ", "2026-06-01"], [], ["#", "SN", "PIN", "x", "y", "Value"], ["1", "S1", "P1", "", "", "10"], ["2", "S2", "P2", "", "", "10"]];
+  const r = P.applyProfile(profile(), src([sheet(rows)]), {});
+  eq("header row found below title rows", r.records.map((x) => [x.pin, x.serial, x.row]), [["P1", "S1", 5], ["P2", "S2", 6]]);
+  eq("title rows not counted as data", [r.readRows, codes(r.issues)], [2, []]);
+  // سري وسيريال في نفس الصف مطلوبان: صف فيه PIN فقط لا يُعتبر رأسًا
+  const rows2 = [["PIN note"], ["PIN"], ["#", "SN", "PIN", "x", "y", "Value"], ["1", "S1", "P1", "", "", "10"]];
+  eq("header needs both pin and serial names", P.applyProfile(profile(), src([sheet(rows2)]), {}).records.map((x) => x.row), [4]);
 }
 {
   // header: "no"

@@ -171,13 +171,18 @@ function scoreProfile(p, info) {
   return (100 * crit.reduce((a, [w, v]) => a + w * v, 0)) / wsum;
 }
 
+// عدد عناوين detect.headers الموجودة في الملف — يرجّح الأكثر تحديدًا عند تساوي الدرجة
+function matchedHeaders(p, info) {
+  const have = info.headers ? new Set(info.headers.map(normalizeKey)) : null;
+  return have ? ((p.detect && p.detect.headers) || []).filter((h) => isNonEmptyStr(h) && have.has(normalizeKey(h))).length : 0;
+}
+
 function rankProfiles(list, info) {
-  const ranked = (list || []).map((profile) => ({ profile, score: scoreProfile(profile, info) }))
-    .sort((a, b) => b.score - a.score);
+  const ranked = (list || []).map((profile) => ({ profile, score: scoreProfile(profile, info), matched: matchedHeaders(profile, info) }))
+    .sort((a, b) => b.score - a.score || b.matched - a.matched);
+  const tie = ranked[1] && ranked[1].score === ranked[0].score && ranked[1].matched === ranked[0].matched;
   let decision = "manual";
-  if (ranked.length && ranked[0].score >= 40 && !(ranked[1] && ranked[1].score === ranked[0].score)) {
-    decision = ranked[0].score >= 70 ? "auto" : "confirm";
-  }
+  if (ranked.length && ranked[0].score >= 40 && !tie) decision = ranked[0].score >= 70 ? "auto" : "confirm";
   return { ranked, decision };
 }
 
@@ -217,10 +222,26 @@ function fileInfo(source) {
   const first = sheets.find((s) => !isBlankRow(s.rows[firstContentRow(s.rows)]));
   let headers = null;
   if (first) {
-    const row = first.rows[firstContentRow(first.rows)];
-    if (detectHasHeader(row.map((c) => normalizeCell(c)))) headers = row.map((c) => normalizeCell(c));
+    // صف العناوين المرجّح: أول صف (ضمن أول 25) فيه خليتان نصيتان أو أكثر وكله نصوص — يتخطى صفوف العنوان فوق الجدول
+    const rows = first.rows.slice(0, HEADER_SCAN).map((r) => r.map((c) => normalizeCell(c)));
+    const row = rows.find((r) => r.filter((c) => c !== "").length >= 2 && detectHasHeader(r));
+    const firstRow = rows[firstContentRow(rows)];
+    if (row && (row === firstRow || detectHasHeader(firstRow) || firstRow.filter((c) => c !== "").length < 2)) headers = row;
   }
   return { fileName: source.fileName, headers, sheetNames: sheets.map((s) => s.sheetName || "") };
+}
+
+// أول صف (ضمن أول 25) يطابق فيه اسمٌ من أسماء السري واسمٌ من أسماء السيريال خليتين (مطابقة تامة بعد التطبيع)
+const HEADER_SCAN = 25;
+function findHeaderRow(p, rows) {
+  const names = (ref) => new Set(((ref && ref.names) || []).filter(isNonEmptyStr).map(normalizeKey));
+  const pins = names(p.fields.pin), serials = names(p.fields.serial);
+  if (!pins.size || !serials.size) return -1;
+  for (let r = 0; r < Math.min(rows.length, HEADER_SCAN); r++) {
+    const keys = (rows[r] || []).map(normalizeKey);
+    if (keys.some((k) => pins.has(k)) && keys.some((k) => serials.has(k))) return r;
+  }
+  return -1;
 }
 
 // جداول موحّدة من المصدر: [{ sheet, headers|null, dataRows, rowNumbers, rowIndex, flags, batchHeader }]
@@ -236,9 +257,12 @@ function readSource(p, source) {
   const tables = [];
   selectedSheets(p, source).forEach((s) => {
     const rows = s.rows || [];
-    const start = firstContentRow(rows);
-    if (start >= rows.length) return; // ورقة فارغة
-    const hasHeader = wantsHeader(p.input.header, rows[start]);
+    const first = firstContentRow(rows);
+    if (first >= rows.length) return; // ورقة فارغة
+    // صف العناوين قد لا يكون الأول (فواتير فوقها عناوين): ابحث عن صف فيه اسم للسري واسم للسيريال
+    const found = p.input.header === "no" ? -1 : findHeaderRow(p, rows);
+    const start = found >= 0 ? found : first;
+    const hasHeader = found >= 0 || wantsHeader(p.input.header, rows[start]);
     const headers = hasHeader ? rows[start].map((c) => normalizeCell(c)) : null;
     const dataStart = hasHeader ? start + 1 : start;
     const idx = [];
