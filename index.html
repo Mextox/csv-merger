@@ -3,30 +3,62 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>دمج ملفات CSV — أداة احترافية بدون تخزين</title>
-<meta name="description" content="أداة احترافية لدمج ملفات CSV داخل المتصفح مع فحص التناقضات والأخطاء الشائعة — لا يُرفع أو يُخزَّن أي شيء.">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧩</text></svg>">
-<link rel="stylesheet" href="style.css?v=7">
+<title>لوحة عمليات التميم</title>
+<meta name="description" content="لوحة عمليات التميم — أدوات معالجة ملفات الكروت داخل المتصفح، تعمل بدون إنترنت ولا يُرفع أي ملف.">
+<meta name="theme-color" content="#312e81">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="css/base.css?v=8">
+<link rel="stylesheet" href="css/shell.css?v=8">
 </head>
 <body>
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="side-brand">
+      <img src="icons/icon.svg" alt="">
+      <div><b>التميم</b><small>لوحة العمليات</small></div>
+    </div>
+    <nav class="nav">
+      <a href="#/home" data-route="home"><span class="nav-icon">🏠</span><span class="nav-label">الرئيسية</span></a>
+      <a href="#/merge" data-route="merge"><span class="nav-icon">🧩</span><span class="nav-label">الدمج والتقسيم</span></a>
+    </nav>
+    <div class="side-foot">🔒 كل المعالجة داخل متصفحك — لا يُرفع أي ملف</div>
+  </aside>
 
-<header class="topbar">
-  <div class="container topbar-inner">
-    <div class="brand">
-      <span class="brand-icon">🧩</span>
-      <div>
-        <h1>دمج ملفات CSV</h1>
-        <p class="tagline">ادمج عدة ملفات في ملف واحد مع فحص ذكي للتناقضات والأخطاء الشائعة</p>
+  <div class="main">
+    <header class="topbar">
+      <div class="container topbar-inner">
+        <div class="brand">
+          <button type="button" id="menuBtn" class="menu-btn" aria-label="القائمة">☰</button>
+          <div>
+            <h1 id="viewTitle">الرئيسية</h1>
+            <p class="tagline">لوحة عمليات التميم</p>
+          </div>
+        </div>
+        <div class="privacy-pill" title="كل المعالجة تتم محليًا عبر JavaScript داخل متصفحك">🔒 يعمل بدون إنترنت — لا يُرفع أو يُخزَّن أي ملف</div>
       </div>
+    </header>
+    <div id="updateBar" class="update-bar" hidden>
+      يوجد إصدار جديد من اللوحة.
+      <button type="button" id="updateBtn" class="btn btn-primary btn-sm">إعادة التحميل</button>
     </div>
-    <div class="privacy-pill" title="كل المعالجة تتم محليًا عبر JavaScript داخل متصفحك">
-      🔒 يعمل بالكامل داخل متصفحك — لا يُرفع أو يُخزَّن أي ملف
-    </div>
-  </div>
-</header>
 
-<main class="container">
+    <section class="view" data-view="home" hidden>
+      <main class="container">
+        <div class="home-grid">
+          <a class="tool-card" href="#/merge">
+            <span class="tool-icon">🧩</span>
+            <h3>الدمج والتقسيم</h3>
+            <p>دمج ملفات CSV وExcel مع فحص التناقضات، وتقسيم الكروت على الشركات في ملف ZIP.</p>
+          </a>
+        </div>
+        <p class="home-note">💡 يمكنك تثبيت اللوحة كتطبيق من قائمة المتصفح، وستعمل بعدها بدون إنترنت.</p>
+      </main>
+    </section>
 
+    <section class="view" data-view="merge" hidden>
+      <main class="container">
   <!-- منطقة الإفلات -->
   <section id="dropzone" class="dropzone" tabindex="0" role="button" aria-label="اختر أو أسقط ملفات CSV أو Excel">
     <div class="dz-icon">📂</div>
@@ -117,16 +149,25 @@
     </div>
     <div id="splitDialog" class="split-dialog" hidden></div>
   </section>
+      </main>
+    </section>
 
-</main>
-
-<footer class="footer">
-  <div class="container">
-    <p>🔒 خصوصية كاملة: تتم كل المعالجة محليًا داخل متصفحك ولا يغادر أي ملف جهازك.</p>
-    <p><a href="https://github.com/Mextox/csv-merger" target="_blank" rel="noopener">المشروع مفتوح المصدر على GitHub</a> · رخصة MIT</p>
+    <footer class="footer">
+      <div class="container">
+        <p>🔒 خصوصية كاملة: تتم كل المعالجة محليًا داخل متصفحك ولا يغادر أي ملف جهازك.</p>
+        <p><a href="https://github.com/Mextox/tamim-ops" target="_blank" rel="noopener">المشروع على GitHub</a> · رخصة MIT</p>
+      </div>
+    </footer>
   </div>
-</footer>
+</div>
 
-<script src="app.js?v=7"></script>
+<script src="js/app/version.js?v=8"></script>
+<script src="js/core/csv.js?v=8"></script>
+<script src="js/core/merge.js?v=8"></script>
+<script src="js/core/zip.js?v=8"></script>
+<script src="js/core/xlsx.js?v=8"></script>
+<script src="js/tools/merge.js?v=8"></script>
+<script src="js/app/pwa.js?v=8"></script>
+<script src="js/app/shell.js?v=8"></script>
 </body>
 </html>
