@@ -39,7 +39,8 @@ function missingCategoryCodes(records, codes) {
     const raw = r.categoryRaw;
     if (raw === "" || hasOwn(codes, raw) || seen.has(raw)) return;
     seen.add(raw);
-    out.push({ raw, suggestion: digitsOnly(raw) || raw });
+    // رمز جاهز (مثل 10 أو h10) يُقترح كما هو؛ نص وصفي (مثل "كارت وي 100ج") تُقترح أرقامه
+    out.push({ raw, suggestion: /^[A-Za-z0-9._-]+$/.test(raw) ? raw : digitsOnly(raw) || raw });
   });
   return out;
 }

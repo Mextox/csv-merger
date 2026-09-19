@@ -94,6 +94,9 @@ const src = (sheets, fileName) => ({ fileName: fileName || "ملف.xlsx", sheets
   eq("fallback index when no name", P.resolveColumn({ names: ["xyz"], index: 0 }, ["PIN", "SN"]), { index: 0, byIndex: true });
   eq("index when headerless", P.resolveColumn({ names: ["PIN"], index: 2 }, null), { index: 2, byIndex: false });
   check("error when nothing", !!P.resolveColumn({ names: ["xyz"] }, ["PIN"]).error);
+  eq("index-only ref with headers is not a warning", P.resolveColumn({ names: [], index: 1 }, ["a", "b"]), { index: 1, byIndex: false });
+  eq("empty first match falls to next name", P.resolveColumn({ names: ["الكود", "الرقم السري"] }, ["الكود", "الرقم السري (PIN)", "السيريال"], [["", "123", "s"], ["", "456", "t"]]), { index: 1, byIndex: false });
+  eq("non-empty first match kept", P.resolveColumn({ names: ["الكود", "الرقم السري"] }, ["الكود", "الرقم السري (PIN)"], [["9", "123"]]), { index: 0, byIndex: false });
 }
 
 /* ---------- القراءة والتطبيق ---------- */

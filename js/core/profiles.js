@@ -258,14 +258,23 @@ function readSource(p, source) {
 
 /* ---------- تحديد الأعمدة ---------- */
 
-function resolveColumn(ref, headers) {
+// يحدد العمود: بالاسم (مطابقة تامة ثم جزئية، بترتيب الأسماء)، ثم بالرقم.
+// dataRows اختياري: إن كان أول عمود مطابق فارغًا تمامًا يُجرَّب الاسم التالي
+// (مثال: عمود "الكود" فارغ في بعض الفواتير والكود الفعلي في "الرقم السري (PIN)").
+// byIndex = حُدد بالرقم رغم وجود عناوين وأسماء لم تُطابق (مؤشر تغيّر ترتيب أعمدة المورد).
+function resolveColumn(ref, headers, dataRows) {
   const names = ((ref && ref.names) || []).filter(isNonEmptyStr).map(normalizeKey);
   if (headers && names.length) {
     const keys = headers.map(normalizeKey);
-    for (const n of names) { const i = keys.indexOf(n); if (i >= 0) return { index: i, byIndex: false }; }
-    for (const n of names) { const i = keys.findIndex((k) => k !== "" && k.includes(n)); if (i >= 0) return { index: i, byIndex: false }; }
+    const candidates = [];
+    for (const n of names) { const i = keys.indexOf(n); if (i >= 0 && !candidates.includes(i)) candidates.push(i); }
+    for (const n of names) { keys.forEach((k, i) => { if (k !== "" && k.includes(n) && !candidates.includes(i)) candidates.push(i); }); }
+    if (candidates.length) {
+      const hasData = (i) => !dataRows || dataRows.some((r) => normalizeCell(r[i]) !== "");
+      return { index: candidates.find(hasData) != null ? candidates.find(hasData) : candidates[0], byIndex: false };
+    }
   }
-  if (ref && isIndex(ref.index)) return { index: ref.index, byIndex: !!headers };
+  if (ref && isIndex(ref.index)) return { index: ref.index, byIndex: !!headers && names.length > 0 };
   return { error: `لم يُعثر على عمود ${names.length ? `باسم ${names.map((n) => `"${n}"`).join(" أو ")}` : ""}` };
 }
 
@@ -358,7 +367,7 @@ function applyProfile(p, source, answers) {
     if (p.company.from === "column") colRefs.company = p.company;
     let bad = false;
     Object.entries(colRefs).forEach(([field, ref]) => {
-      const r = resolveColumn(ref, t.headers);
+      const r = resolveColumn(ref, t.headers, t.dataRows);
       if (!r.error && r.index >= width) r.error = `العمود رقم ${r.index + 1} غير موجود (عدد الأعمدة ${width})`;
       if (r.error) {
         bad = true;

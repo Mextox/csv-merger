@@ -17,6 +17,7 @@ const rec = (pin, serial, company, categoryRaw, row, extra) =>
   const recs = [rec("1", "a", "c", "كارت 10", 2), rec("2", "b", "c", "20", 3), rec("3", "d", "c", "كارت 10", 4), rec("4", "e", "c", "", 5)];
   eq("missing codes unique with suggestion, empty excluded", C.missingCategoryCodes(recs, { "20": "20" }), [{ raw: "كارت 10", suggestion: "10" }]);
   eq("suggestion falls back to raw", C.missingCategoryCodes([rec("1", "a", "c", "ذهبي", 2)], {}), [{ raw: "ذهبي", suggestion: "ذهبي" }]);
+  eq("code-like raw suggested as is", C.missingCategoryCodes([rec("1", "a", "c", "h10", 2), rec("2", "b", "c", "5 LYD", 3)], {}).map((m) => m.suggestion), ["h10", "5"]);
   const r = C.assignCodes(recs, { "كارت 10": "10", "20": "20" });
   eq("assign codes", r.cards.map((c) => c.category), ["10", "20", "10", ""]);
   eq("categoryRaw kept", r.cards[0].categoryRaw, "كارت 10");
