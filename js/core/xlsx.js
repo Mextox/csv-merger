@@ -249,7 +249,8 @@ function parseSheet(xml, sst, styleFmts, date1904, flags) {
   const found = []; // { kind, row, col } قبل القصّ
   const rowsByIndex = [];
   let maxRow = 0, maxCol = 0, nextRow = 0;
-  const rowRe = /<row\b([^>]*)(?:\/>|>([\s\S]*?)<\/row>)/g;
+  // [^>]*? كسول: وإلا تبتلع "/" في <row …/> فيُعامل كوسم مفتوح ويلتهم الصف التالي
+  const rowRe = /<row\b([^>]*?)(?:\/>|>([\s\S]*?)<\/row>)/g;
   let rm;
   while ((rm = rowRe.exec(xml))) {
     const rAttr = getAttr(rm[1], "r");
@@ -258,7 +259,7 @@ function parseSheet(xml, sst, styleFmts, date1904, flags) {
     const content = rm[2] || "";
     const cells = [];
     let autoCol = 0;
-    const cellRe = /<c\b([^>]*)(?:\/>|>([\s\S]*?)<\/c>)/g;
+    const cellRe = /<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g;
     let cm;
     while ((cm = cellRe.exec(content))) {
       const cAttrs = cm[1];
