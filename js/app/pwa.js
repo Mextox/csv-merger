@@ -4,21 +4,26 @@
   if (!("serviceWorker" in navigator) || location.protocol === "file:") return;
   const bar = document.getElementById("updateBar");
   const btn = document.getElementById("updateBtn");
+  // إعادة التحميل فقط بعد ضغط المستخدم زر التحديث — أول تثبيت يطلق controllerchange أيضًا
+  // (بسبب clients.claim) ولا يجوز أن يعيد تحميل صفحة قد يكون المستخدم بدأ العمل فيها.
+  let userRequested = false;
   let reloading = false;
 
   function offer(reg) {
     if (!reg.waiting) return;
     bar.hidden = false;
-    btn.onclick = () => { btn.disabled = true; reg.waiting.postMessage("skipWaiting"); };
+    btn.onclick = () => { userRequested = true; btn.disabled = true; reg.waiting.postMessage("skipWaiting"); };
   }
 
   navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (reloading) return;
+    if (!userRequested || reloading) return;
     reloading = true;
     location.reload();
   });
 
-  navigator.serviceWorker.register("sw.js").then((reg) => {
+  // updateViaCache: "none" — فحص التحديث يتجاوز ذاكرة HTTP لـ sw.js ولـ version.js المستورد فيه،
+  // وإلا لا يُكتشف رفع رقم الإصدار حتى تنتهي صلاحية الذاكرة (10 دقائق على GitHub Pages).
+  navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then((reg) => {
     offer(reg);
     reg.addEventListener("updatefound", () => {
       const nw = reg.installing;
