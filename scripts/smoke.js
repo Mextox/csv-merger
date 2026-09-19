@@ -44,8 +44,63 @@ const check = (name, cond, extra) => {
   await send("Page.navigate", { url });
   await sleep(2500);
 
-  check("Tamim.core loaded", await evaluate("!!(window.Tamim && Tamim.core && Tamim.core.csv && Tamim.core.merge && Tamim.core.zip && Tamim.core.xlsx)"));
+  check("Tamim.core loaded", await evaluate("!!(window.Tamim && Tamim.core && Tamim.core.csv && Tamim.core.merge && Tamim.core.zip && Tamim.core.xlsx && Tamim.core.profiles && Tamim.core.cards)"));
   check("home view shown by default", await evaluate("!document.querySelector('[data-view=home]').hidden"));
+
+  // أول تشغيل: حوار اسم الجهاز
+  const hadDialog = await evaluate("!!document.querySelector('dialog[open]')");
+  check("first run asks for device name", hadDialog);
+  if (hadDialog) {
+    await evaluate("(() => { const d = document.querySelector('dialog[open]'); d.querySelector('input').value = 'جهاز الفحص'; d.querySelector('.btn-primary').click(); return true; })()");
+    await sleep(400);
+  }
+  check("device name saved", (await evaluate("Tamim.app.store.meta('deviceName')")) === "جهاز الفحص");
+
+  // الاستيراد من البداية للنهاية: ملف إعداد + ملف CSV ← فحص ← نتيجة ← سلة العمل ← الدمج
+  await evaluate(`(async () => {
+    const p = Object.assign(Tamim.core.profiles.defaultProfile(), {
+      id: "smoke-1", name: "شركة الفحص",
+      company: { from: "fixed", value: "smk" },
+      categoryCodes: { "10": "10", "20": "20" },
+      detect: { headers: ["PIN", "SN", "Value"], fileName: [], sheetNames: [] },
+    });
+    p.fields.pin = { names: ["PIN"], index: null };
+    p.fields.serial = { names: ["SN"], index: null };
+    p.fields.category = { from: "column", names: ["Value"], index: null };
+    await Tamim.app.store.put("profiles", p);
+    return true;
+  })()`);
+  await evaluate("location.hash = '#/import'");
+  await sleep(400);
+  await evaluate(`Tamim.tools.import.addFiles([new File(["PIN,SN,Value\\n111,S1,10\\n222,S2,10\\n333,S3,20\\n"], "supplier.csv", { type: "text/csv" })]).then(() => true)`);
+  await sleep(600);
+  check("import auto-detects profile", (await evaluate("document.querySelector('#importRoot .t-file-profile select').value")) === "smoke-1");
+  await evaluate("[...document.querySelectorAll('#importRoot button')].find(b => b.textContent.includes('معالجة')).click(); true");
+  await sleep(800);
+  check("import result shows 2 output files", (await evaluate("document.querySelectorAll('#importRoot .t-result tbody tr').length")) === 2);
+  check("import reconcile ok", await evaluate("!!document.querySelector('#importRoot .t-reconcile.ok')"));
+  // السيريالات فيها حروف (S1) ← تحذير NON_DIGIT يمنع التنزيل حتى التأكيد
+  const dlDisabled = "[...document.querySelectorAll('#importRoot .t-result button')].find(b => b.textContent.includes('تنزيل')).disabled";
+  check("warning blocks download until acknowledged", await evaluate(dlDisabled));
+  await evaluate("document.querySelector('#importRoot .t-ack input').click(); true");
+  await sleep(300);
+  check("import download enabled after acknowledging", !(await evaluate(dlDisabled)));
+  await evaluate("[...document.querySelectorAll('#importRoot .t-result button')].find(b => b.textContent.includes('سلة العمل')).click(); true");
+  await sleep(300);
+  check("workspace has 2 datasets", (await evaluate("Tamim.app.workspace.list().length")) === 2);
+  await evaluate("location.hash = '#/home'");
+  await sleep(300);
+  check("home lists workspace items", (await evaluate("document.querySelectorAll('#homeRoot .t-workspace tbody tr').length")) === 2);
+  await evaluate("[...document.querySelectorAll('#homeRoot .t-workspace button')].find(b => b.textContent.includes('إلى الدمج')).click(); true");
+  await sleep(600);
+  check("workspace item opened in merge", (await evaluate("document.querySelectorAll('#filesList .file-card').length")) === 1);
+  check("merge preview has workspace rows", (await evaluate("document.querySelectorAll('#previewTable tbody tr').length")) === 2);
+  await evaluate("document.getElementById('clearBtn').click(); Tamim.app.workspace.clear(); true");
+  await evaluate("location.hash = '#/settings'");
+  await sleep(400);
+  check("settings lists the profile", (await evaluate("document.querySelector('#settingsRoot').textContent.includes('شركة الفحص')")));
+  await evaluate("location.hash = '#/home'");
+  await sleep(300);
   await evaluate("location.hash = '#/merge'");
   await sleep(300);
   check("merge view shown after navigation", await evaluate("!document.querySelector('[data-view=merge]').hidden && document.querySelector('[data-view=home]').hidden"));

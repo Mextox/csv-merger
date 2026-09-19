@@ -9,8 +9,9 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="css/base.css?v=8">
-<link rel="stylesheet" href="css/shell.css?v=8">
+<link rel="stylesheet" href="css/base.css?v=9">
+<link rel="stylesheet" href="css/shell.css?v=9">
+<link rel="stylesheet" href="css/tools.css?v=9">
 </head>
 <body>
 <div class="app">
@@ -21,7 +22,9 @@
     </div>
     <nav class="nav">
       <a href="#/home" data-route="home"><span class="nav-icon">🏠</span><span class="nav-label">الرئيسية</span></a>
+      <a href="#/import" data-route="import"><span class="nav-icon">📥</span><span class="nav-label">استيراد كروت المورد</span></a>
       <a href="#/merge" data-route="merge"><span class="nav-icon">🧩</span><span class="nav-label">الدمج والتقسيم</span></a>
+      <a href="#/settings" data-route="settings"><span class="nav-icon">⚙️</span><span class="nav-label">الإعدادات</span></a>
     </nav>
     <div class="side-foot">🔒 كل المعالجة داخل متصفحك — لا يُرفع أي ملف</div>
   </aside>
@@ -45,16 +48,11 @@
     </div>
 
     <section class="view" data-view="home" hidden>
-      <main class="container">
-        <div class="home-grid">
-          <a class="tool-card" href="#/merge">
-            <span class="tool-icon">🧩</span>
-            <h3>الدمج والتقسيم</h3>
-            <p>دمج ملفات CSV وExcel مع فحص التناقضات، وتقسيم الكروت على الشركات في ملف ZIP.</p>
-          </a>
-        </div>
-        <p class="home-note">💡 يمكنك تثبيت اللوحة كتطبيق من قائمة المتصفح، وستعمل بعدها بدون إنترنت.</p>
-      </main>
+      <main class="container" id="homeRoot"></main>
+    </section>
+
+    <section class="view" data-view="import" hidden>
+      <main class="container" id="importRoot"></main>
     </section>
 
     <section class="view" data-view="merge" hidden>
@@ -67,6 +65,7 @@
     <div class="dz-actions">
       <button type="button" id="pickBtn" class="btn btn-primary">اختر الملفات</button>
       <button type="button" id="demoBtn" class="btn btn-ghost">جرّب بملفات تجريبية</button>
+      <button type="button" id="fromWorkspaceBtn" class="btn btn-ghost" hidden>📥 من سلة العمل</button>
     </div>
     <input type="file" id="fileInput" accept=".csv,.xlsx,.xlsm,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12" multiple hidden>
   </section>
@@ -152,6 +151,10 @@
       </main>
     </section>
 
+    <section class="view" data-view="settings" hidden>
+      <main class="container" id="settingsRoot"></main>
+    </section>
+
     <footer class="footer">
       <div class="container">
         <p>🔒 خصوصية كاملة: تتم كل المعالجة محليًا داخل متصفحك ولا يغادر أي ملف جهازك.</p>
@@ -161,13 +164,24 @@
   </div>
 </div>
 
-<script src="js/app/version.js?v=8"></script>
-<script src="js/core/csv.js?v=8"></script>
-<script src="js/core/merge.js?v=8"></script>
-<script src="js/core/zip.js?v=8"></script>
-<script src="js/core/xlsx.js?v=8"></script>
-<script src="js/tools/merge.js?v=8"></script>
-<script src="js/app/pwa.js?v=8"></script>
-<script src="js/app/shell.js?v=8"></script>
+<script src="js/app/version.js?v=9"></script>
+<script src="js/core/text.js?v=9"></script>
+<script src="js/core/csv.js?v=9"></script>
+<script src="js/core/merge.js?v=9"></script>
+<script src="js/core/zip.js?v=9"></script>
+<script src="js/core/xlsx.js?v=9"></script>
+<script src="js/core/batchtxt.js?v=9"></script>
+<script src="js/core/profiles.js?v=9"></script>
+<script src="js/core/cards.js?v=9"></script>
+<script src="js/core/settings-pack.js?v=9"></script>
+<script src="js/app/store.js?v=9"></script>
+<script src="js/app/workspace.js?v=9"></script>
+<script src="js/app/ui.js?v=9"></script>
+<script src="js/tools/home.js?v=9"></script>
+<script src="js/tools/import.js?v=9"></script>
+<script src="js/tools/merge.js?v=9"></script>
+<script src="js/tools/settings.js?v=9"></script>
+<script src="js/app/pwa.js?v=9"></script>
+<script src="js/app/shell.js?v=9"></script>
 </body>
 </html>

@@ -10,6 +10,7 @@
   }
 })(function (require) {
 const { xlsxError, parseZipEntries } = require("./zip.js");
+const { hasPrecisionLoss } = require("./text.js");
 
 /* =====================================================================
  * قارئ ملفات Excel (.xlsx / .xlsm) — بلا أي تبعيات أو طلبات خارجية.
@@ -191,8 +192,9 @@ function excelSerialToText(serial, kind, date1904) {
 
 /* ---------- تحليل الأوراق ---------- */
 
-// قيمة خلية واحدة كنص، حسب نوعها (t) وتنسيقها (للتواريخ)
-function cellValue(t, content, sst, sAttr, styleFmts, date1904) {
+// قيمة خلية واحدة كنص، حسب نوعها (t) وتنسيقها (للتواريخ).
+// flag اختياري: يُستدعى بـ "date" لخلية رقمية حُوّلت إلى تاريخ، وبـ "lossy" لخلية رقمية فقدت دقتها.
+function cellValue(t, content, sst, sAttr, styleFmts, date1904, flag) {
   if (t === "s") {
     const idx = parseInt(extractTag(content, "v") || "", 10);
     return (sst && sst[idx] != null) ? sst[idx] : "";
@@ -212,9 +214,13 @@ function cellValue(t, content, sst, sAttr, styleFmts, date1904) {
     const numFmtId = styleFmts.cellXfs[parseInt(sAttr, 10)];
     if (numFmtId != null) {
       const kind = classifyNumFmt(numFmtId, styleFmts.numFmts[numFmtId]);
-      if (kind) return excelSerialToText(num, kind, date1904);
+      if (kind) {
+        if (flag) flag("date");
+        return excelSerialToText(num, kind, date1904);
+      }
     }
   }
+  if (flag && hasPrecisionLoss(num)) flag("lossy");
   return num;
 }
 
@@ -237,8 +243,10 @@ function trimTrailingEmpty(rows) {
   });
 }
 
-// تحليل XML ورقة إلى صفوف نصية — يملأ الفراغات حسب مرجع الخلية r ويقصّ الفراغ الخلفي
-function parseSheet(xml, sst, styleFmts, date1904) {
+// تحليل XML ورقة إلى صفوف نصية — يملأ الفراغات حسب مرجع الخلية r ويقصّ الفراغ الخلفي.
+// flags اختياري { lossy: [], date: [] }: يُضاف إليه { row, col } (فهارس صفرية في الصفوف الناتجة) لكل خلية معلَّمة.
+function parseSheet(xml, sst, styleFmts, date1904, flags) {
+  const found = []; // { kind, row, col } قبل القصّ
   const rowsByIndex = [];
   let maxRow = 0, maxCol = 0, nextRow = 0;
   const rowRe = /<row\b([^>]*)(?:\/>|>([\s\S]*?)<\/row>)/g;
@@ -260,7 +268,8 @@ function parseSheet(xml, sst, styleFmts, date1904) {
       if (colIdx < 0) continue;
       const t = getAttr(cAttrs, "t") || "n";
       const sAttr = getAttr(cAttrs, "s");
-      cells[colIdx] = cellValue(t, cm[2] || "", sst, sAttr, styleFmts, date1904);
+      const flag = flags ? (kind) => { found.push({ kind, row: rIdx, col: colIdx }); } : undefined;
+      cells[colIdx] = cellValue(t, cm[2] || "", sst, sAttr, styleFmts, date1904, flag);
       if (colIdx + 1 > maxCol) maxCol = colIdx + 1;
     }
     for (let i = 0; i < cells.length; i++) if (cells[i] == null) cells[i] = "";
@@ -274,10 +283,18 @@ function parseSheet(xml, sst, styleFmts, date1904) {
     for (let i = 0; i < maxCol; i++) row.push(src[i] == null ? "" : src[i]);
     rows.push(row);
   }
-  return trimTrailingEmpty(rows);
+  const trimmed = trimTrailingEmpty(rows);
+  if (flags) {
+    // القصّ يحذف من النهاية فقط، فالفهارس تبقى صحيحة؛ نُسقط ما وقع خارج الصفوف الناتجة
+    const width = trimmed.length ? trimmed[0].length : 0;
+    found.forEach((f) => {
+      if (f.row < trimmed.length && f.col < width) flags[f.kind].push({ row: f.row, col: f.col });
+    });
+  }
+  return trimmed;
 }
 
-// يحلّل بايتات .xlsx/.xlsm إلى [{ sheetName, rows }] لكل ورقة بترتيب المصنّف
+// يحلّل بايتات .xlsx/.xlsm إلى [{ sheetName, rows, flags: { lossy, date } }] لكل ورقة بترتيب المصنّف
 async function parseXlsx(bytes) {
   const b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
   // ملفات .xls القديمة (OLE2) غير مدعومة
@@ -323,7 +340,9 @@ async function parseXlsx(bytes) {
     }
     const sheetXml = readXml(path);
     if (sheetXml == null) return;
-    out.push({ sheetName: sh.name || ("ورقة " + (i + 1)), rows: parseSheet(sheetXml, sst, styleFmts, date1904) });
+    const flags = { lossy: [], date: [] };
+    const rows = parseSheet(sheetXml, sst, styleFmts, date1904, flags);
+    out.push({ sheetName: sh.name || ("ورقة " + (i + 1)), rows, flags });
   });
 
   if (out.length === 0) throw xlsxError("BADXLSX", "لم يتم العثور على أوراق قابلة للقراءة في ملف Excel.");

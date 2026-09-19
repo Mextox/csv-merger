@@ -169,7 +169,7 @@ function buildOutputs(cards, output, meta) {
       if (u.renamed) renamed.push(u.path);
       let text = output.header ? line(output.columns) : "";
       chunk.forEach((c) => { text += line(output.columns.map((col) => c[col])); });
-      files.push({ company: first.company, category: vars.category, fileName: u.path.slice(folder.length + 1), path: u.path, rows: chunk.length, text });
+      files.push({ company: first.company, category: vars.category, fileName: u.path.slice(folder.length + 1), path: u.path, rows: chunk.length, text, cards: chunk });
     }
   });
   const issues = renamed.length

@@ -272,6 +272,9 @@ if (typeof document !== "undefined") {
       a = { name: f.name, delimiter: null, excel: { sheetName: null }, headers: [], dataRows: [], issues: [{ severity: "error", file: f.name, message: f.message }], empty: true, hasHeader: true };
     } else if (f.kind === "excel") {
       a = analyzeRows(f.name, f.rows, opts, f.hasHeaderOverride, { excel: { sheetName: f.sheetName } });
+    } else if (f.kind === "rows") {
+      // عنصر من سلة العمل: صفوف جاهزة (الفاصل للعرض فقط)
+      a = analyzeRows(f.name, f.rows, opts, f.hasHeaderOverride, { delimiter: "," });
     } else {
       a = analyzeFile(f.name, f.text, opts, f.hasHeaderOverride);
     }
@@ -989,5 +992,38 @@ if (typeof document !== "undefined") {
   });
   $("splitAddBtn").addEventListener("click", addCompany);
   $("extractBtn").addEventListener("click", doExtract);
+
+  /* ---------- سلة العمل ---------- */
+
+  // يضيف عنصرًا من سلة العمل كفئة (ملف) — dataset: { id, name, header|null, rows }
+  function addDataset(ds) {
+    if (state.files.some((x) => x.srcName === "workspace:" + ds.id)) return; // مضاف مسبقًا
+    const rows = ds.header ? [ds.header].concat(ds.rows) : ds.rows;
+    const size = rows.reduce((n, r) => n + r.reduce((m, c) => m + String(c).length + 1, 0), 0);
+    state.files.push({ id: fileSeq++, kind: "rows", name: ds.name, srcName: "workspace:" + ds.id, srcSize: size, size, rows, hasHeaderOverride: !!ds.header, encodingNote: null });
+    render();
+  }
+
+  const ws = globalThis.Tamim.app && globalThis.Tamim.app.workspace;
+  const wsBtn = $("fromWorkspaceBtn");
+  if (ws && wsBtn) {
+    const syncBtn = () => { wsBtn.hidden = ws.list().length === 0; };
+    ws.on(syncBtn);
+    syncBtn();
+    wsBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const items = ws.list();
+      const { el, dialog } = globalThis.Tamim.app.ui;
+      const boxes = items.map((ds) => ({ ds, cb: el("input", { type: "checkbox", checked: true }) }));
+      dialog({
+        title: "إضافة من سلة العمل",
+        body: el("div", {}, boxes.map(({ ds, cb }) => el("label", { class: "opt opt-check t-ws-pick" }, cb, " ", el("bdi", { text: ds.name }), ` — ${ds.rows.length} صف`))),
+        actions: [{ label: "إضافة", value: true, kind: "primary" }, { label: "إلغاء", value: false }],
+      }).then((ok) => { if (ok) boxes.filter((b) => b.cb.checked).forEach((b) => addDataset(b.ds)); });
+    });
+  }
+
+  globalThis.Tamim.tools = globalThis.Tamim.tools || {};
+  globalThis.Tamim.tools.merge = { addDataset };
 }
 })();

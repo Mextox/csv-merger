@@ -11,7 +11,9 @@ function check(name, cond, extra) {
   else { failed++; console.log("FAIL: " + name + (extra ? " | " + JSON.stringify(extra) : "")); }
 }
 
-const ORDER = ["csv", "merge", "zip", "xlsx"];
+// ترتيب index.html — الاسم المسجَّل قد يختلف عن اسم الملف (settings-pack ← settingsPack)
+const ORDER = ["text", "csv", "merge", "zip", "xlsx", "batchtxt", "profiles", "cards", "settings-pack"];
+const REG = { "settings-pack": "settingsPack" };
 const ctx = vm.createContext({ TextEncoder, TextDecoder, DecompressionStream, console });
 ctx.globalThis = ctx;
 for (const m of ORDER) {
@@ -20,7 +22,9 @@ for (const m of ORDER) {
 }
 const core = ctx.Tamim && ctx.Tamim.core;
 check("Tamim.core exists", !!core);
-ORDER.forEach((m) => check(`module ${m} registered`, core && typeof core[m] === "object"));
+ORDER.forEach((m) => check(`module ${m} registered`, core && typeof core[REG[m] || m] === "object"));
+check("profiles uses csv+text (fileInfo)", core.profiles.fileInfo(core.profiles.csvSource("a.csv", "PIN,SN\n1,2", "auto")).headers.join() === "PIN,SN");
+check("cards uses text (missingCategoryCodes suggestion)", core.cards.missingCategoryCodes([{ categoryRaw: "كارت 10" }], {})[0].suggestion === "10");
 check("csv.parseCSV works", core.csv.parseCSV("a,b\n1,2", ",").rows.length === 2);
 check("merge uses csv (buildMerge)", core.merge.buildMerge(
   [core.csv.analyzeFile("x.csv", "a,b\n1,2", { skipEmpty: true }, null)],
