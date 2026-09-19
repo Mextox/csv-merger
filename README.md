@@ -1,12 +1,32 @@
-# 🧩 دمج ملفات CSV — CSV Merger
+# 🗂️ لوحة عمليات التميم — Tamim Ops
 
-**أداة ويب احترافية لدمج عدة ملفات CSV في ملف واحد، مع فحص ذكي للتناقضات والأخطاء الشائعة — تعمل بالكامل داخل المتصفح ولا يُرفع أو يُخزَّن أي شيء.**
+**لوحة عمليات واحدة لمعالجة ملفات الكروت داخل المتصفح: تعمل بدون إنترنت، ولا يُرفع أو يُخزَّن أي ملف.**
 
-### 🔗 جرّبها الآن: <https://mextox.github.io/csv-merger/>
+### 🔗 افتح اللوحة: <https://mextox.github.io/tamim-ops/>
 
 ---
 
-## المميزات
+## التثبيت والعمل بدون إنترنت
+
+- افتح الرابط مرة واحدة، ثم ثبّت اللوحة من قائمة المتصفح (**تثبيت التطبيق** في Chrome/Edge، أو **إضافة إلى الشاشة الرئيسية** على الجوال). بعدها تعمل بدون إنترنت.
+- عند نشر إصدار جديد يظهر شريط **"يوجد إصدار جديد"** — لا تُعاد الصفحة وحدها حتى لا يضيع عمل في منتصفه.
+- يمكن أيضًا فتح `index.html` مباشرة من مجلد على الجهاز.
+
+## الخصوصية
+
+كل المعالجة عبر JavaScript داخل متصفحك — لا خادم، لا رفع، لا مكتبات خارجية، ولا تُحفظ الكروت في أي مكان.
+
+## الأدوات
+
+| الأداة | الحالة |
+|---|---|
+| 🧩 الدمج والتقسيم | متاحة |
+| 📥 استيراد كروت المورد (ملفات إعداد لكل شركة) | قيد البناء |
+| 🔢 أدوات السيريال، ↩️ الترجيع، 🧾 الفواتير والتقارير | مراحل لاحقة |
+
+## أداة الدمج والتقسيم
+
+### المميزات
 
 - **ارفع ملفًا أو أكثر** بالسحب والإفلات أو الاختيار، وشاهد الدمج والمعاينة فورًا.
 - **دعم ملفات Excel (`.xlsx` / `.xlsm`):** ارفعها جنبًا إلى جنب مع ملفات CSV — يُقرأ المصنّف بالكامل داخل المتصفح (قارئ ZIP خاص يدعم STORE وDEFLATE عبر `DecompressionStream` المدمج + تحليل XML خفيف، **بلا أي مكتبات**). كل **ورقة غير فارغة** تصبح فئة مستقلة تمرّ بنفس مسار الفحص والمحاذاة والدمج والتقسيم. تُقرأ السلاسل المشتركة (مع النص الغني) والنصوص المضمّنة وقِيَم الصيغ المخزّنة والقيم المنطقية، وتُحوَّل التواريخ تلقائيًا إلى نص (`YYYY-MM-DD` أو مع الوقت `YYYY-MM-DD HH:MM:SS`، مع مراعاة نظام 1904). ملفات `.xls` القديمة تُرفض برسالة تطلب حفظها بصيغة `.xlsx`.
@@ -18,7 +38,7 @@
 - **محاذاة الأعمدة بالاسم** وليس بالموقع، مع خيار اتحاد كل الأعمدة أو الأعمدة المشتركة فقط.
 - **تنزيل الناتج** بترميز UTF-8 مع BOM ليفتح في Excel بشكل صحيح (وكذلك كل ملفات الـ ZIP).
 
-## التقسيم حسب الشركات
+### التقسيم حسب الشركات
 
 بعض العملاء يريدون الملفات مدموجة، وبعضهم يريد كل فئة في ملف منفصل. زر **"تقسيم"** يفتح قسمًا تكتب فيه اسم الشركة وعدد الكروت (الصفوف) التي تأخذها من كل فئة:
 
@@ -28,7 +48,7 @@
 - عند الاستخراج إذا بقيت صفوف بلا شركة يسألك: استخراج المتبقي مدموجًا أم بدون دمج.
 - الناتج **ملف ZIP** واحد (مبني بالكامل داخل المتصفح، طريقة STORE بلا ضغط، بلا أي مكتبات) فيه مجلد باسم كل شركة + مجلد "المتبقي" عند الحاجة.
 
-## الفحوصات الذكية
+### الفحوصات الذكية
 
 قبل الدمج تعرض الأداة قائمة مصنّفة (خطأ / تحذير / ملاحظة) تكشف:
 
@@ -44,7 +64,7 @@
 | صفوف مكررة داخل الملف أو بين الملفات | مع خيار حذفها |
 | صفوف فارغة، ملفات فارغة، علامات اقتباس غير مغلقة | |
 
-## خيارات الدمج
+### خيارات الدمج
 
 - اتحاد كل الأعمدة (الافتراضي) أو الأعمدة المشتركة فقط
 - تجاهل الصفوف الفارغة
@@ -54,39 +74,51 @@
 - مفتاح "الصف الأول عناوين" لكل ملف على حدة
 - حذف أي عمود من الناتج، وإعادة ترتيب الأعمدة بالسحب
 
+## بنية المشروع
+
+لا خطوة بناء ولا مكتبات: ملفات JavaScript عادية تُحمَّل بالترتيب من `index.html`.
+
+| المسار | المحتوى |
+|---|---|
+| `js/core/csv.js` | تحليل CSV واكتشاف الترميز والفاصل، تحليل الملف، الفحوص بين الملفات، كتابة CSV |
+| `js/core/merge.js` | خطة الأعمدة والدمج، حذف الأعمدة، خطة التقسيم على الشركات |
+| `js/core/zip.js` | كاتب وقارئ ZIP بلا مكتبات |
+| `js/core/xlsx.js` | قارئ Excel (.xlsx/.xlsm) |
+| `js/tools/*.js` | واجهة كل أداة |
+| `js/app/*.js` | التنقّل، العمل بدون نت، رقم الإصدار |
+| `sw.js` | Service Worker |
+| `tests/` | الاختبارات |
+
+وحدات `js/core` نقيّة (بلا DOM) وتعمل في المتصفح عبر `Tamim.core.*` وفي Node عبر `require`.
+
 ## التشغيل محليًا
 
-لا يحتاج أي تبعيات أو خطوة بناء — افتح `index.html` في المتصفح مباشرة، أو:
-
 ```bash
-git clone https://github.com/Mextox/csv-merger.git
-cd csv-merger
-# أي خادم ملفات ثابتة، مثلًا:
-python -m http.server 8000
+git clone https://github.com/Mextox/tamim-ops.git
+cd tamim-ops
+python -m http.server 8000   # ثم افتح http://localhost:8000
 ```
 
 ## الاختبارات
 
-منطق التحليل والدمج والتقسيم وقارئ/كاتب الـ ZIP وقراءة Excel مغطى بـ 172 اختبار وحدة:
-
 ```bash
-node test.js
+node tests/run.js                              # كل اختبارات الوحدات والاتساق
+node scripts/smoke.js http://localhost:8000/   # فحص حي في Chrome (Node ≥ 22)
 ```
+
+تعمل الاختبارات تلقائيًا في GitHub Actions، ولا يُنشر أي تحديث إلا إذا نجحت كلها.
+
+عند تعديل أي ملف من ملفات التطبيق: ارفع الرقم في `js/app/version.js` وفي روابط `?v=` داخل `index.html` (اختبار `app-shell` يتحقق من تطابقهما ومن أن كل ملف مذكور في قائمة `sw.js`).
 
 ---
 
 ## English
 
-**CSV Merger** — a professional client-side tool that merges multiple CSV files into one, with smart consistency checks (schema differences, stacked tables, ragged rows, type outliers, duplicates, encoding issues, headerless files). Everything runs in your browser via vanilla JavaScript — **nothing is ever uploaded or stored, no dependencies, no CDN**.
+**Tamim Ops** — a single operations dashboard for processing card files entirely in the browser. It works offline as an installable PWA, uploads and stores nothing, and has no dependencies or build step.
 
-Key features:
+Current tool: **Merge & Split** — merge CSV/Excel files with smart consistency checks (schema differences, stacked tables, ragged rows, type outliers, duplicates, encoding issues, headerless files) and split rows across companies into a ZIP. Upcoming: supplier card import with per-company profiles, serial tools, returns, invoices and reports.
 
-- **Excel support (`.xlsx` / `.xlsm`)** — drop them in alongside CSVs. The workbook is parsed entirely in-browser with a dependency-free ZIP reader (STORE + DEFLATE via the built-in `DecompressionStream`) plus lightweight XML parsing. Every non-empty sheet becomes its own category that flows through the same checks, alignment, merge, and split pipeline. Shared strings (incl. rich-text runs), inline strings, cached formula values, booleans, and error cells are handled; date/time serials are converted to text (`YYYY-MM-DD` / `YYYY-MM-DD HH:MM:SS` / `HH:MM:SS`, honoring the 1904 date system). Legacy `.xls` (BIFF/OLE2) files are rejected with a clear message to re-save as `.xlsx`.
-- **Delete unwanted columns** — click ✕ on any output column to exclude it from the merged download *and* from the split output; restore with "reset".
-- **Split by company** — allocate each file's rows (a "category") across several companies with per-category counts (sequential from the top, auto-clamped to what's available). Each company has a **merge** toggle: merged → one CSV; unmerged → one CSV per category (keeping that file's own columns; headerless files stay headerless). Leftover rows go to a "المتبقي" (remainder) folder. The result is a single **ZIP** file with one folder per company — built entirely in-browser with a dependency-free STORE-method ZIP writer (CRC-32 + local headers + central directory + EOCD, UTF-8 filename flag for Arabic).
-- Auto-detects delimiter, encoding (UTF-8 / UTF-16 / Windows-1256), and whether each file has a header row (with a per-file manual toggle); aligns columns by name — or by position for headerless files — and exports UTF-8 CSV with BOM for Excel compatibility. When all files are headerless, the merged output contains no header row.
-
-**Live:** <https://mextox.github.io/csv-merger/> · Run tests with `node test.js` (172 unit tests) · No dependencies, no build step.
+Run tests with `node tests/run.js`; live browser check with `node scripts/smoke.js <url>`.
 
 ## License
 
