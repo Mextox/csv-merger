@@ -96,6 +96,25 @@ const check = (name, cond, extra) => {
   check("workspace item opened in merge", (await evaluate("document.querySelectorAll('#filesList .file-card').length")) === 1);
   check("merge preview has workspace rows", (await evaluate("document.querySelectorAll('#previewTable tbody tr').length")) === 2);
   await evaluate("document.getElementById('clearBtn').click(); Tamim.app.workspace.clear(); true");
+
+  // معالج شركة جديدة: ملف بعناوين غير معروفة ← المعالج ← ملف إعداد جديد مختار تلقائيًا
+  await evaluate("location.hash = '#/import'");
+  await sleep(300);
+  await evaluate(`(async () => { [...document.querySelectorAll('#importRoot button')].find(b => b.textContent.includes('مسح الكل')).click();
+    await Tamim.tools.import.addFiles([new File(["الرقم السري,رقم التسلسل,الفئة\\n5550001,8880001,10 LYD\\n5550002,8880002,10 LYD\\n"], "مورد-جديد.csv", { type: "text/csv" })]); return true; })()`);
+  await sleep(500);
+  check("unknown file offers the new-company wizard", await evaluate("!![...document.querySelectorAll('#importRoot button')].find(b => b.textContent.includes('شركة جديدة'))"));
+  await evaluate("[...document.querySelectorAll('#importRoot button')].find(b => b.textContent.includes('شركة جديدة')).click(); true");
+  await sleep(500);
+  check("wizard guessed pin/serial/category columns", (await evaluate("[...document.querySelectorAll('dialog[open] .t-wizard select')].slice(0, 2).map(s => s.value).join(',')")) === "0,1");
+  check("wizard preview shows cards", (await evaluate("document.querySelectorAll('dialog[open] .t-wiz-preview tbody tr').length")) === 2);
+  await evaluate(`(() => { const inputs = document.querySelectorAll('dialog[open] .t-wizard input[type=text]');
+    const set = (el, v) => { el.value = v; el.dispatchEvent(new Event('input')); };
+    set(inputs[0], 'مورد جديد'); set(inputs[1], 'new1');
+    [...document.querySelectorAll('dialog[open] .btn-primary')][0].click(); return true; })()`);
+  await sleep(800);
+  check("wizard saved profile and selected it", await evaluate("document.querySelector('#importRoot .t-file-profile select').selectedOptions[0].textContent.includes('مورد جديد')"));
+  check("new profile detects the file next time", (await evaluate("Tamim.app.store.all('profiles').then(ps => ps.find(p => p.name === 'مورد جديد').detect.headers.length)")) === 3);
   await evaluate("location.hash = '#/settings'");
   await sleep(400);
   check("settings lists the profile", (await evaluate("document.querySelector('#settingsRoot').textContent.includes('شركة الفحص')")));

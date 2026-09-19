@@ -27,6 +27,7 @@ const ASSETS = [
   "js/app/workspace.js",
   "js/app/ui.js",
   "js/tools/home.js",
+  "js/tools/wizard.js",
   "js/tools/import.js",
   "js/tools/merge.js",
   "js/tools/settings.js",

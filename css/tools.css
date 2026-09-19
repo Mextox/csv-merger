@@ -53,6 +53,8 @@
 .t-advanced summary { cursor: pointer; color: var(--muted); font-weight: 600; margin-bottom: 8px; }
 
 .t-codes-group h4 { margin: 12px 0 6px; }
+.t-wizard .t-grid { margin: 6px 0 10px; }
+.t-wiz-preview { border-top: 1px solid var(--border); margin-top: 8px; padding-top: 8px; }
 .t-ws-pick { display: flex; padding: 6px 0; }
 
 /* الحوار والإشعارات */

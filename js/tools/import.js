@@ -79,6 +79,18 @@
     });
   }
 
+  // معالج شركة جديدة: ملف لا يطابق أي ملف إعداد ← ملف إعداد جديد يُختار لهذا الملف مباشرة
+  async function newCompany(item) {
+    const saved = await T.tools.wizard.open({ name: item.name, source: sourceFor(item, null) });
+    if (!saved) return;
+    await loadProfiles();
+    rerank();
+    item.profileId = saved.id;
+    item.userPicked = true;
+    state.result = null;
+    render();
+  }
+
   async function addFiles(list) {
     const accepted = list.filter((f) => /\.(xlsx|xlsm|csv|txt)$/i.test(f.name));
     if (accepted.length < list.length) toast(`تم تجاهل ${list.length - accepted.length} ملف بصيغة غير مدعومة`);
@@ -259,7 +271,8 @@
     return el("div", { class: "file-card t-file-card" },
       el("span", { class: "file-icon", text: item.source ? "📊" : "📄" }),
       head,
-      el("div", { class: "t-file-profile" }, select, el("span", { class: cls, text: label }), asks),
+      el("div", { class: "t-file-profile" }, select, el("span", { class: cls, text: label }), asks,
+        !item.batch && (!p || item.decision === "manual") ? el("button", { type: "button", class: "btn btn-ghost btn-sm", text: "✨ شركة جديدة من هذا الملف", onclick: () => newCompany(item) }) : null),
       remove);
   }
 
