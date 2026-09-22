@@ -2,7 +2,9 @@
 
 **لوحة عمليات واحدة لمعالجة ملفات الكروت داخل المتصفح: تعمل بدون إنترنت، ولا يُرفع أو يُخزَّن أي ملف.**
 
-### 🔗 افتح اللوحة: <https://mextox.github.io/tamim-ops/>
+### 🔗 افتح اللوحة: <https://mextox.github.io/csv-merger/>
+
+> يُعاد تسمية المستودع إلى `tamim-ops` لاحقًا، وعندها يصبح الرابط <https://mextox.github.io/tamim-ops/>.
 
 ---
 
@@ -131,8 +133,8 @@
 ## التشغيل محليًا
 
 ```bash
-git clone https://github.com/Mextox/tamim-ops.git
-cd tamim-ops
+git clone https://github.com/Mextox/csv-merger.git
+cd csv-merger
 python -m http.server 8000   # ثم افتح http://localhost:8000
 ```
 
