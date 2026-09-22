@@ -97,6 +97,36 @@ const check = (name, cond, extra) => {
   check("merge preview has workspace rows", (await evaluate("document.querySelectorAll('#previewTable tbody tr').length")) === 2);
   await evaluate("document.getElementById('clearBtn').click(); Tamim.app.workspace.clear(); true");
 
+  // نفس الملف مرتين باسمين مختلفين ← تحذير
+  await evaluate("location.hash = '#/import'");
+  await sleep(300);
+  await evaluate(`(async () => { const clear = [...document.querySelectorAll('#importRoot button')].find(b => b.textContent.includes('مسح الكل')); if (clear) clear.click();
+    const body = "PIN,SN,Value\\n111,222,10\\n";
+    await Tamim.tools.import.addFiles([new File([body], "a.csv"), new File([body], "b.csv")]); return true; })()`);
+  await sleep(700);
+  await evaluate("[...document.querySelectorAll('#importRoot button')].find(b => b.textContent.includes('معالجة')).click(); true");
+  await sleep(900);
+  check("same file twice warns", await evaluate("[...document.querySelectorAll('#importRoot .issue')].some(li => li.textContent.includes('نفس الملف مضاف أكثر من مرة'))"));
+
+  // حزمة الإعدادات: استيراد حزمة فيها ملف إعداد جديد ← جدول الفروق ← تطبيق
+  await evaluate("location.hash = '#/settings'");
+  await sleep(500);
+  await evaluate(`(async () => {
+    const p = Object.assign(Tamim.core.profiles.defaultProfile(), { id: "pack-1", name: "شركة من الحزمة", updatedAt: new Date().toISOString(), updatedBy: "جهاز آخر", company: { from: "fixed", value: "pk" } });
+    p.fields.pin = { names: ["PIN"], index: null }; p.fields.serial = { names: ["SN"], index: null }; p.fields.category = { from: "column", names: ["Value"], index: null };
+    const pack = Tamim.core.settingsPack.makePack({ device: "جهاز آخر", now: new Date().toISOString(), stores: { profiles: [p] } });
+    const input = document.querySelector('#settingsRoot input[type=file]');
+    const dt = new DataTransfer();
+    dt.items.add(new File([JSON.stringify(pack)], "tamim-settings.json", { type: "application/json" }));
+    input.files = dt.files;
+    input.dispatchEvent(new Event("change"));
+    return true; })()`);
+  await sleep(800);
+  check("settings pack import shows the diff", await evaluate("[...document.querySelectorAll('#settingsRoot .t-pack td')].some(td => td.textContent === 'جديد')"));
+  await evaluate("[...document.querySelectorAll('#settingsRoot .t-pack button')].find(b => b.textContent.includes('تطبيق')).click(); true");
+  await sleep(900);
+  check("settings pack applied", await evaluate("Tamim.app.store.all('profiles').then(ps => ps.some(p => p.id === 'pack-1' && p.updatedBy === 'جهاز آخر'))"));
+
   // ملف Excel محمي بكلمة سر: يُطلب الباسورد، ويُرفض الخاطئ، ويُفتح بالصحيح (الملف التجريبي: Tamim-123)
   if (url.startsWith("http")) {
     await evaluate("location.hash = '#/import'");

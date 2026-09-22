@@ -48,7 +48,7 @@
     const XC = T.core.xlsxCrypt;
     const kind = XC.inspectOle(bytes).kind;
     if (kind === "not-ole") return await T.core.xlsx.parseXlsx(bytes);
-    if (kind !== "encrypted-agile") return XC.decryptXlsx(bytes, ""); // يرمي رسالة الصيغة غير المدعومة
+    if (kind !== "encrypted-agile") { XC.decryptXlsx(bytes, ""); throw new Error("unreachable"); } // يرمي رسالة الصيغة غير المدعومة
     for (let attempt = 0; attempt < 3; attempt++) {
       const pw = await askPassword(fileName, attempt > 0);
       if (pw == null) throw Object.assign(new Error("password cancelled"), { arMessage: "الملف محمي بكلمة سر ولم تُدخل — أزل الملف أو أعد إضافته لإدخالها." });
@@ -61,12 +61,20 @@
     throw Object.assign(new Error("bad password"), { arMessage: "كلمة السر غير صحيحة بعد ثلاث محاولات." });
   }
 
+  // بصمة الملف لكشف استيراد نفس الملف مرتين في الجلسة
+  async function fileHash(bytes) {
+    if (!(globalThis.crypto && crypto.subtle)) return "";
+    const d = await crypto.subtle.digest("SHA-256", bytes);
+    return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
+
   async function readFile(f) {
     const item = { id: ++seq, name: f.name, size: f.size, profileId: "", userPicked: false, answers: {}, error: "" };
     const lower = f.name.toLowerCase();
     try {
+      const bytes = new Uint8Array(await f.arrayBuffer());
+      item.hash = await fileHash(bytes);
       if (/\.(xlsx|xlsm|xls)$/.test(lower)) {
-        const bytes = new Uint8Array(await f.arrayBuffer());
         item.source = { fileName: f.name, sheets: await readExcelSheets(f.name, bytes) };
       } else if (/\.(csv|txt)$/.test(lower)) {
         item.text = (await T.core.csv.readFileSmart(f)).text;
@@ -211,6 +219,12 @@
     const issues = [];
     const files = [];
     const allCards = [];
+    // نفس الملف مستورد مرتين في هذه الدفعة (بصمة متطابقة رغم اختلاف الاسم)
+    const byHash = new Map();
+    items.forEach((i) => { if (!i.hash) return; if (!byHash.has(i.hash)) byHash.set(i.hash, []); byHash.get(i.hash).push(i.name); });
+    byHash.forEach((names) => {
+      if (names.length > 1) issues.push({ level: "warning", code: "SAME_FILE_TWICE", message: `نفس الملف مضاف أكثر من مرة (محتوى متطابق): ${names.join("، ")} — ستتكرر الكروت في الناتج.`, file: names[0], sheet: null, rows: [] });
+    });
     let readRows = 0, skippedEmpty = 0;
     const usedPaths = new Set();
     byProfile.forEach((list, id) => {
