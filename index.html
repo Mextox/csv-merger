@@ -23,6 +23,7 @@
     <nav class="nav">
       <a href="#/home" data-route="home"><span class="nav-icon">🏠</span><span class="nav-label">الرئيسية</span></a>
       <a href="#/import" data-route="import"><span class="nav-icon">📥</span><span class="nav-label">استيراد كروت المورد</span></a>
+      <a href="#/split" data-route="split"><span class="nav-icon">✂️</span><span class="nav-label">التقسيم والتصدير</span></a>
       <a href="#/merge" data-route="merge"><span class="nav-icon">🧩</span><span class="nav-label">الدمج والتقسيم</span></a>
       <a href="#/settings" data-route="settings"><span class="nav-icon">⚙️</span><span class="nav-label">الإعدادات</span></a>
     </nav>
@@ -53,6 +54,10 @@
 
     <section class="view" data-view="import" hidden>
       <main class="container" id="importRoot"></main>
+    </section>
+
+    <section class="view" data-view="split" hidden>
+      <main class="container" id="splitRoot"></main>
     </section>
 
     <section class="view" data-view="merge" hidden>
@@ -174,6 +179,7 @@
 <script src="js/core/crypto.js?v=10"></script>
 <script src="js/core/xlsx-crypt.js?v=10"></script>
 <script src="js/core/batchtxt.js?v=10"></script>
+<script src="js/core/split.js?v=10"></script>
 <script src="js/core/profiles.js?v=10"></script>
 <script src="js/core/cards.js?v=10"></script>
 <script src="js/core/settings-pack.js?v=10"></script>
@@ -183,6 +189,7 @@
 <script src="js/tools/home.js?v=10"></script>
 <script src="js/tools/wizard.js?v=10"></script>
 <script src="js/tools/import.js?v=10"></script>
+<script src="js/tools/split.js?v=10"></script>
 <script src="js/tools/merge.js?v=10"></script>
 <script src="js/tools/settings.js?v=10"></script>
 <script src="js/app/pwa.js?v=10"></script>

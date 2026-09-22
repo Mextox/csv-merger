@@ -9,11 +9,12 @@
   const root = document.getElementById("settingsRoot");
   if (!root) return;
 
-  const state = { profiles: [], device: "", persisted: false, editing: null, packDiff: null, packInfo: null, error: "" };
+  const state = { profiles: [], templates: [], device: "", persisted: false, editing: null, editingTemplate: null, packDiff: null, packInfo: null, error: "" };
 
   async function load() {
     try {
       state.profiles = (await store.all("profiles")).sort((a, b) => a.name.localeCompare(b.name, "ar"));
+      state.templates = (await store.all("templates")).sort((a, b) => a.name.localeCompare(b.name, "ar"));
       state.device = (await store.meta("deviceName")) || "";
       state.persisted = await store.persisted();
       state.error = "";
@@ -226,11 +227,96 @@
     root.scrollIntoView({ behavior: "smooth" });
   }
 
+  /* ---------- القوالب: تمبلت الأكواد (تقسيم الكروت) وقالب التصدير (Batch) ---------- */
+
+  function newTemplate(kind) {
+    return kind === "codes"
+      ? { id: store.newId(), kind: "codes", name: "", code: "", categories: [{ name: "", code: "" }] }
+      : { id: store.newId(), kind: "batch", name: "", code: "", start: "", end: "[END]" };
+  }
+
+  function validateTemplate(t) {
+    const errors = [];
+    if (!t.name.trim()) errors.push("الاسم مطلوب");
+    if (!String(t.code).trim()) errors.push(t.kind === "codes" ? "كود التمبلت (العمود الثالث) مطلوب" : "كود الفئة مطلوب");
+    if (t.kind === "codes") {
+      const cats = (t.categories || []).filter((c) => c.name.trim() || String(c.code).trim());
+      if (!cats.length) errors.push("أضف فئة واحدة على الأقل");
+      cats.forEach((c, i) => { if (!c.name.trim() || !String(c.code).trim()) errors.push(`الفئة ${i + 1}: الاسم والكود مطلوبان`); });
+    } else if (!t.start.trim()) errors.push("نص رأس القالب مطلوب");
+    return errors;
+  }
+
+  function templateEditor() {
+    const t = state.editingTemplate.model;
+    const errors = state.editingTemplate.errors || [];
+    const cats = t.kind === "codes"
+      ? el("div", { class: "t-rules" },
+        t.categories.map((c, i) => el("div", { class: "t-rule" }, el("div", { class: "t-grid" },
+          field("اسم الفئة", input(c.name, (v) => { c.name = v; })),
+          field("كود الفئة (العمود الرابع)", input(c.code, (v) => { c.code = v; }, { dir: "ltr" })),
+          el("button", { type: "button", class: "btn btn-ghost btn-sm", text: "✕ حذف الفئة", onclick: () => { t.categories.splice(i, 1); render(); } })))),
+        el("button", { type: "button", class: "btn btn-ghost btn-sm", text: "+ إضافة فئة", onclick: () => { t.categories.push({ name: "", code: "" }); render(); } }))
+      : null;
+    return el("section", { class: "card t-editor" },
+      el("div", { class: "card-head" },
+        el("h2", { text: t.kind === "codes" ? "تمبلت أكواد (تقسيم الكروت)" : "قالب تصدير Batch" }),
+        el("button", { type: "button", class: "btn btn-ghost btn-sm", text: "← رجوع", onclick: () => { state.editingTemplate = null; render(); } })),
+      errors.length ? el("ul", { class: "issues-list" }, errors.map((e) => el("li", { class: "issue issue-error" }, el("span", { class: "sev", text: "خطأ" }), el("span", { text: e })))) : null,
+      el("div", { class: "t-grid" },
+        field("الاسم", input(t.name, (v) => { t.name = v; })),
+        field(t.kind === "codes" ? "كود التمبلت (العمود الثالث)" : "كود الفئة (العمود الرابع في ملف الكروت)", input(t.code, (v) => { t.code = v; }, { dir: "ltr" }))),
+      cats,
+      t.kind === "batch" ? el("div", {},
+        field("نص الرأس (قبل الكروت)", textarea(t.start, (v) => { t.start = v; }, 8), "انسخه كما هو من ملف المورد، وينتهي عادة بسطر [BEGIN]"),
+        field("نص الذيل", textarea(t.end, (v) => { t.end = v; }, 2))) : null,
+      el("div", { class: "split-actions" },
+        el("button", { type: "button", class: "btn btn-primary", text: "💾 حفظ", onclick: async () => {
+          const errs = validateTemplate(t);
+          if (errs.length) { state.editingTemplate.errors = errs; render(); return; }
+          if (t.kind === "codes") t.categories = t.categories.filter((c) => c.name.trim());
+          await store.put("templates", t);
+          toast("تم حفظ القالب", "ok");
+          state.editingTemplate = null;
+          await load();
+          render();
+        } }),
+        el("button", { type: "button", class: "btn btn-ghost", text: "إلغاء", onclick: () => { state.editingTemplate = null; render(); } })));
+  }
+
+  function templatesCard() {
+    return el("section", { class: "card" },
+      el("div", { class: "card-head" },
+        el("h2", {}, "القوالب ", el("span", { class: "count-badge", text: String(state.templates.length) })),
+        el("div", { class: "head-actions" },
+          el("button", { type: "button", class: "btn btn-ghost btn-sm", text: "+ تمبلت أكواد", onclick: () => { state.editingTemplate = { model: newTemplate("codes"), errors: [] }; render(); } }),
+          el("button", { type: "button", class: "btn btn-ghost btn-sm", text: "+ قالب تصدير", onclick: () => { state.editingTemplate = { model: newTemplate("batch"), errors: [] }; render(); } }))),
+      el("p", { class: "align-hint", text: "تمبلت الأكواد يضيف كود الشركة وكود الفئة عند تقسيم الكروت. وقالب التصدير هو رأس وذيل ملف Batch الذي يطلبه المورد." }),
+      state.templates.length === 0 ? el("p", { class: "align-hint", text: "لا توجد قوالب بعد." })
+        : el("div", { class: "table-wrap" }, el("table", { class: "t-table" },
+          el("thead", {}, el("tr", {}, ["الاسم", "النوع", "الكود", "التفاصيل", "آخر تعديل", ""].map((h) => el("th", { text: h })))),
+          el("tbody", {}, state.templates.map((t) => el("tr", {},
+            el("td", {}, el("bdi", { text: t.name })),
+            el("td", { text: t.kind === "codes" ? "أكواد" : "تصدير Batch" }),
+            el("td", { dir: "ltr", text: String(t.code) }),
+            el("td", { text: t.kind === "codes" ? `${(t.categories || []).length} فئة` : `${(t.start || "").split("\n").length} سطر رأس` }),
+            el("td", { text: `${t.updatedBy || ""} ${fmtDate(t.updatedAt)}` }),
+            el("td", { class: "t-actions" },
+              el("button", { type: "button", class: "btn btn-ghost btn-sm", text: "تعديل", onclick: () => { state.editingTemplate = { model: JSON.parse(JSON.stringify(t)), errors: [] }; render(); } }),
+              el("button", { type: "button", class: "btn btn-ghost btn-sm", text: "حذف", onclick: async () => {
+                const ok = await dialog({ title: "حذف القالب", body: el("p", { text: `حذف "${t.name}" من هذا الجهاز؟` }), actions: [{ label: "حذف", value: true, kind: "primary" }, { label: "إلغاء", value: false }] });
+                if (!ok) return;
+                await store.remove("templates", t.id);
+                await load();
+                render();
+              } }))))))));
+  }
+
   /* ---------- حزمة الإعدادات ---------- */
 
   async function exportPack() {
     const now = new Date().toISOString();
-    const pack = SP.makePack({ device: state.device, now, stores: { profiles: state.profiles } });
+    const pack = SP.makePack({ device: state.device, now, stores: { profiles: state.profiles, templates: state.templates } });
     const safe = (state.device || "جهاز").replace(/[\/\\:*?"<>|\s]+/g, "-");
     download(`tamim-settings-${safe}-${today()}.json`, JSON.stringify(pack, null, 2), "application/json");
     await store.setMeta("lastBackupAt", now);
@@ -241,11 +327,15 @@
     const text = await file.text();
     const parsed = SP.parsePack(text);
     if (!parsed.ok) { state.packDiff = null; state.packInfo = { error: parsed.error }; render(); return; }
-    const diff = SP.diffPack({ profiles: state.profiles }, parsed.pack);
+    const diff = SP.diffPack({ profiles: state.profiles, templates: state.templates }, parsed.pack);
     diff.forEach((d) => {
-      if (d.store !== "profiles") { d.unknown = true; d.apply = false; return; }
-      const v = P.validateProfile(d.incoming);
-      if (!v.ok) { d.invalid = v.errors; d.apply = false; }
+      if (d.store === "profiles") {
+        const v = P.validateProfile(d.incoming);
+        if (!v.ok) { d.invalid = v.errors; d.apply = false; }
+      } else if (d.store === "templates") {
+        const errs = validateTemplate(Object.assign({ kind: "codes", categories: [], start: "", end: "" }, d.incoming));
+        if (errs.length) { d.invalid = errs; d.apply = false; }
+      } else { d.unknown = true; d.apply = false; }
     });
     state.packDiff = diff;
     state.packInfo = { device: parsed.pack.device, exportedAt: parsed.pack.exportedAt, fileName: file.name };
@@ -292,6 +382,7 @@
     clear(root);
     if (state.error) root.appendChild(el("p", { class: "t-hint t-hint-error", text: `تعذّر الوصول إلى الحفظ المحلي: ${state.error}` }));
     if (state.editing) { root.appendChild(editorView()); return; }
+    if (state.editingTemplate) { root.appendChild(templateEditor()); return; }
 
     let deviceInput;
     root.appendChild(el("section", { class: "card" },
@@ -335,18 +426,20 @@
                 render();
               } })))))))));
 
+    root.appendChild(templatesCard());
+
     const packInput = el("input", { type: "file", accept: ".json,application/json", hidden: true, onchange: (e) => { if (e.target.files[0]) readPack(e.target.files[0]); e.target.value = ""; } });
     root.appendChild(el("section", { class: "card" },
       el("div", { class: "card-head" }, el("h2", { text: "حزمة الإعدادات (النسخ الاحتياطي والمشاركة)" })),
       el("p", { class: "align-hint", text: "صدّر ملف الإعدادات لحفظ نسخة احتياطية أو لنقله إلى جهاز آخر، ثم استورده هناك. الكروت لا تُحفظ في هذا الملف أبدًا." }),
       el("div", { class: "split-actions" },
-        el("button", { type: "button", class: "btn btn-primary", text: "⬇ تصدير الحزمة", disabled: state.profiles.length === 0, onclick: exportPack }),
+        el("button", { type: "button", class: "btn btn-primary", text: "⬇ تصدير الحزمة", disabled: state.profiles.length === 0 && state.templates.length === 0, onclick: exportPack }),
         el("button", { type: "button", class: "btn btn-ghost", text: "⬆ استيراد حزمة", onclick: () => packInput.click() }),
         packInput),
       packView()));
   }
 
-  store.on((s) => { if (!state.editing && (s === "profiles" || s === "meta")) load().then(render); });
+  store.on((s) => { if (!state.editing && !state.editingTemplate && (s === "profiles" || s === "templates" || s === "meta")) load().then(render); });
   load().then(render);
   render();
 })();

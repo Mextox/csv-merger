@@ -148,6 +148,30 @@ const check = (name, cond, extra) => {
     await sleep(300);
   }
 
+  // أداة التقسيم والتصدير: تمبلت أكواد + قالب Batch ← أخذ آخر 3 أسطر وتقسيمها، وسحب كمية بقالب
+  await evaluate(`(async () => {
+    await Tamim.app.store.put("templates", { id: "tpl-codes", kind: "codes", name: "ليبيانا", code: "10", categories: [{ name: "فئة 5", code: "5" }] });
+    await Tamim.app.store.put("templates", { id: "tpl-batch", kind: "batch", name: "قالب 5", code: "5", start: "Batch:1\\n[BEGIN]", end: "[END]" });
+    return true; })()`);
+  await evaluate("location.hash = '#/split'");
+  await sleep(600);
+  check("split tool renders three sections", (await evaluate("document.querySelectorAll('#splitRoot section.card').length")) === 3);
+  await evaluate(`(async () => {
+    const text = ["p1,s1,10,5", "p2,s2,10,5", "p3,s3,10,5", "p4,s4,10,5", "p5,s5,10,5"].join("\\n");
+    const zone = document.querySelector('#splitRoot .dropzone input[type=file]');
+    const dt = new DataTransfer(); dt.items.add(new File([text], "cards.csv", { type: "text/csv" }));
+    zone.files = dt.files; zone.dispatchEvent(new Event("change"));
+    return true; })()`);
+  await sleep(700);
+  check("split tool loaded the file", (await evaluate("document.querySelectorAll('#splitRoot .t-file-card').length")) >= 1);
+  await evaluate(`(() => { const inputs = document.querySelectorAll('#splitRoot .t-grid input[inputmode=numeric]');
+    const set = (el, v) => { el.value = v; el.dispatchEvent(new Event('input')); };
+    set(inputs[0], "3"); set(inputs[1], "2"); // آخر 3 أسطر، تقسيم كل 2
+    [...document.querySelectorAll('#splitRoot button')].find(b => b.textContent === 'معاينة').click(); return true; })()`);
+  await sleep(600);
+  check("split preview shows 2 output files from last 3 lines", (await evaluate("document.querySelectorAll('#splitRoot .t-result tbody tr').length")) === 2);
+  check("split reports remaining lines", await evaluate("[...document.querySelectorAll('#splitRoot .stat')].some(s => s.textContent.includes('سطر متبقٍ'))"));
+
   // معالج شركة جديدة: ملف بعناوين غير معروفة ← المعالج ← ملف إعداد جديد مختار تلقائيًا
   await evaluate("location.hash = '#/import'");
   await sleep(300);
