@@ -9,9 +9,9 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="css/base.css?v=10">
-<link rel="stylesheet" href="css/shell.css?v=10">
-<link rel="stylesheet" href="css/tools.css?v=10">
+<link rel="stylesheet" href="css/base.css?v=11">
+<link rel="stylesheet" href="css/shell.css?v=11">
+<link rel="stylesheet" href="css/tools.css?v=11">
 </head>
 <body>
 <div class="app">
@@ -25,6 +25,7 @@
       <a href="#/import" data-route="import"><span class="nav-icon">📥</span><span class="nav-label">استيراد كروت المورد</span></a>
       <a href="#/split" data-route="split"><span class="nav-icon">✂️</span><span class="nav-label">التقسيم والتصدير</span></a>
       <a href="#/merge" data-route="merge"><span class="nav-icon">🧩</span><span class="nav-label">الدمج والتقسيم</span></a>
+      <a href="#/serials" data-route="serials"><span class="nav-icon">🔢</span><span class="nav-label">أدوات السيريال</span></a>
       <a href="#/settings" data-route="settings"><span class="nav-icon">⚙️</span><span class="nav-label">الإعدادات</span></a>
     </nav>
     <div class="side-foot">🔒 كل المعالجة داخل متصفحك — لا يُرفع أي ملف</div>
@@ -156,6 +157,10 @@
       </main>
     </section>
 
+    <section class="view" data-view="serials" hidden>
+      <main class="container" id="serialsRoot"></main>
+    </section>
+
     <section class="view" data-view="settings" hidden>
       <main class="container" id="settingsRoot"></main>
     </section>
@@ -169,30 +174,32 @@
   </div>
 </div>
 
-<script src="js/app/version.js?v=10"></script>
-<script src="js/core/text.js?v=10"></script>
-<script src="js/core/csv.js?v=10"></script>
-<script src="js/core/merge.js?v=10"></script>
-<script src="js/core/zip.js?v=10"></script>
-<script src="js/core/xlsx.js?v=10"></script>
-<script src="js/core/ole.js?v=10"></script>
-<script src="js/core/crypto.js?v=10"></script>
-<script src="js/core/xlsx-crypt.js?v=10"></script>
-<script src="js/core/batchtxt.js?v=10"></script>
-<script src="js/core/split.js?v=10"></script>
-<script src="js/core/profiles.js?v=10"></script>
-<script src="js/core/cards.js?v=10"></script>
-<script src="js/core/settings-pack.js?v=10"></script>
-<script src="js/app/store.js?v=10"></script>
-<script src="js/app/workspace.js?v=10"></script>
-<script src="js/app/ui.js?v=10"></script>
-<script src="js/tools/home.js?v=10"></script>
-<script src="js/tools/wizard.js?v=10"></script>
-<script src="js/tools/import.js?v=10"></script>
-<script src="js/tools/split.js?v=10"></script>
-<script src="js/tools/merge.js?v=10"></script>
-<script src="js/tools/settings.js?v=10"></script>
-<script src="js/app/pwa.js?v=10"></script>
-<script src="js/app/shell.js?v=10"></script>
+<script src="js/app/version.js?v=11"></script>
+<script src="js/core/text.js?v=11"></script>
+<script src="js/core/csv.js?v=11"></script>
+<script src="js/core/merge.js?v=11"></script>
+<script src="js/core/zip.js?v=11"></script>
+<script src="js/core/xlsx.js?v=11"></script>
+<script src="js/core/ole.js?v=11"></script>
+<script src="js/core/crypto.js?v=11"></script>
+<script src="js/core/xlsx-crypt.js?v=11"></script>
+<script src="js/core/batchtxt.js?v=11"></script>
+<script src="js/core/split.js?v=11"></script>
+<script src="js/core/serials.js?v=11"></script>
+<script src="js/core/profiles.js?v=11"></script>
+<script src="js/core/cards.js?v=11"></script>
+<script src="js/core/settings-pack.js?v=11"></script>
+<script src="js/app/store.js?v=11"></script>
+<script src="js/app/workspace.js?v=11"></script>
+<script src="js/app/ui.js?v=11"></script>
+<script src="js/tools/home.js?v=11"></script>
+<script src="js/tools/wizard.js?v=11"></script>
+<script src="js/tools/import.js?v=11"></script>
+<script src="js/tools/split.js?v=11"></script>
+<script src="js/tools/merge.js?v=11"></script>
+<script src="js/tools/serials.js?v=11"></script>
+<script src="js/tools/settings.js?v=11"></script>
+<script src="js/app/pwa.js?v=11"></script>
+<script src="js/app/shell.js?v=11"></script>
 </body>
 </html>

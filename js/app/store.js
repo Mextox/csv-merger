@@ -6,7 +6,7 @@
   T.app = T.app || {};
 
   const DB_NAME = "tamim";
-  const DB_VERSION = 2; // 2: مخزن القوالب (تمبلتات الأكواد وقوالب التصدير)
+  const DB_VERSION = 3; // 2: القوالب، 3: سجل بصمات الأكواد المولَّدة
   let dbPromise = null;
 
   function open() {
@@ -19,6 +19,7 @@
         if (!db.objectStoreNames.contains("profiles")) db.createObjectStore("profiles", { keyPath: "id" });
         if (!db.objectStoreNames.contains("meta")) db.createObjectStore("meta");
         if (!db.objectStoreNames.contains("templates")) db.createObjectStore("templates", { keyPath: "id" });
+        if (!db.objectStoreNames.contains("codes")) db.createObjectStore("codes", { keyPath: "id" });
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error || new Error("تعذّر فتح قاعدة البيانات المحلية."));

@@ -172,6 +172,31 @@ const check = (name, cond, extra) => {
   check("split preview shows 2 output files from last 3 lines", (await evaluate("document.querySelectorAll('#splitRoot .t-result tbody tr').length")) === 2);
   check("split reports remaining lines", await evaluate("[...document.querySelectorAll('#splitRoot .stat')].some(s => s.textContent.includes('سطر متبقٍ'))"));
 
+  // أدوات السيريال: توليد أكواد (ويُحفظ سجلها)، واستخراج عمود، والبحث عن سيريال داخل ملف
+  await evaluate("location.hash = '#/serials'");
+  await sleep(600);
+  check("serial tools render six sections", (await evaluate("document.querySelectorAll('#serialsRoot section.card').length")) === 6);
+  await evaluate(`(() => { const card = document.querySelectorAll('#serialsRoot section.card')[0];
+    const set = (el, v) => { el.value = v; el.dispatchEvent(new Event('input')); };
+    const inputs = card.querySelectorAll('input[type=text]');
+    set(inputs[0], "8"); set(inputs[1], "5"); set(inputs[2], "77");
+    [...card.querySelectorAll('button')].find(b => b.textContent === 'توليد').click(); return true; })()`);
+  await sleep(700);
+  check("codes generated with serials", (await evaluate("document.querySelectorAll('#serialsRoot .t-result tbody tr').length")) === 5);
+  check("generated codes have the right shape", await evaluate("/^\\d{8}$/.test(document.querySelector('#serialsRoot .t-result tbody td').textContent)"));
+  await evaluate("[...document.querySelectorAll('#serialsRoot button')].find(b => b.textContent.includes('حفظ في السجل')).click(); true");
+  await sleep(800);
+  check("code history saved (hashes only)", (await evaluate("Tamim.app.store.all('codes').then(c => c.length)")) === 5);
+  check("history stores no code text", await evaluate("Tamim.app.store.all('codes').then(c => c.every(x => /^[0-9a-f]{32}$/.test(x.id)))"));
+  await evaluate(`(async () => { const card = document.querySelectorAll('#serialsRoot section.card')[2];
+    const input = card.querySelector('.dropzone input[type=file]');
+    const dt = new DataTransfer(); dt.items.add(new File(["a1,b1,c1\\na2,b2,c2\\n"], "cols.csv", { type: "text/csv" }));
+    input.files = dt.files; input.dispatchEvent(new Event("change")); return true; })()`);
+  await sleep(700);
+  await evaluate("(() => { const card = document.querySelectorAll('#serialsRoot section.card')[2]; [...card.querySelectorAll('button')].find(b => b.textContent === 'معاينة').click(); return true; })()");
+  await sleep(500);
+  check("column extraction result", await evaluate("[...document.querySelectorAll('#serialsRoot section.card')[2].querySelectorAll('tbody td')].map(t => t.textContent).join('|').includes('cols.csv')"));
+
   // معالج شركة جديدة: ملف بعناوين غير معروفة ← المعالج ← ملف إعداد جديد مختار تلقائيًا
   await evaluate("location.hash = '#/import'");
   await sleep(300);
