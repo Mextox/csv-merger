@@ -30,6 +30,18 @@
     return { id: Math.random().toString(36).slice(2), name: f.name, size: f.size, text };
   }
 
+  // تعرّف تلقائي على تمبلت الأكواد من أول سطر: العمود الثالث = كود التمبلت، والرابع = كود الفئة
+  function detectTemplate(text) {
+    const first = (S.toLines(text)[0] || "").split(",");
+    if (first.length < 3) return;
+    const t = codeTemplates().find((x) => String(x.code) === first[2].trim());
+    if (!t) return;
+    const o = state.take.opts;
+    o.templateId = t.id;
+    const cat = (t.categories || []).find((c) => String(c.code) === (first[3] || "").trim());
+    o.categoryName = cat ? cat.name : "";
+  }
+
   /* ---------- 1) أخذ وتقسيم ---------- */
 
   function takeCodes() {
@@ -136,7 +148,7 @@
     const tpl = codeTemplates().find((x) => x.id === o.templateId);
     const zone = dropzone({
       title: "اسحب ملف الكروت (CSV) وأفلته هنا", accept: ".csv,.txt",
-      onFiles: async (list) => { for (const f of list) state.take.files.push(await readAsText(f)); state.take.result = null; render(); },
+      onFiles: async (list) => { for (const f of list) { const x = await readAsText(f); state.take.files.push(x); if (!state.take.opts.templateId) detectTemplate(x.text); } state.take.result = null; render(); },
     });
     const ws = workspace.list();
     return el("section", { class: "card" },
