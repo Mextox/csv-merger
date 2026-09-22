@@ -259,7 +259,8 @@
       download(f.fileName, C.encodeOutput(f.text, f.output), "text/csv");
     } else {
       const zip = T.core.zip.buildZip(files.map((f) => ({ name: f.path, data: C.encodeOutput(f.text, f.output) })));
-      download(`كروت-${today()}.zip`, zip, "application/zip");
+      // اسم إنجليزي: بعض برامج فك الضغط لا تفتح ملفًا في اسمه حروف عربية
+      download(`tamim-cards-${today()}.zip`, zip, "application/zip");
     }
   }
 
