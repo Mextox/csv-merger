@@ -12,8 +12,8 @@ function check(name, cond, extra) {
 }
 
 // ترتيب index.html — الاسم المسجَّل قد يختلف عن اسم الملف (settings-pack ← settingsPack)
-const ORDER = ["text", "csv", "merge", "zip", "xlsx", "batchtxt", "profiles", "cards", "settings-pack"];
-const REG = { "settings-pack": "settingsPack" };
+const ORDER = ["text", "csv", "merge", "zip", "xlsx", "ole", "crypto", "xlsx-crypt", "batchtxt", "profiles", "cards", "settings-pack"];
+const REG = { "settings-pack": "settingsPack", "xlsx-crypt": "xlsxCrypt" };
 const ctx = vm.createContext({ TextEncoder, TextDecoder, DecompressionStream, console });
 ctx.globalThis = ctx;
 for (const m of ORDER) {

@@ -31,17 +31,43 @@
 
   const looksBatch = (text) => /^\s*\[BEGIN\]\s*$/m.test(text);
 
+  // كلمة سر ملف Excel محمي: تُطلب لكل ملف، وتبقى في الذاكرة لحظة فك التشفير فقط ولا تُحفظ.
+  async function askPassword(fileName, retry) {
+    const input = el("input", { type: "password", class: "t-input", dir: "ltr", autocomplete: "off" });
+    const body = el("div", {},
+      el("p", {}, "الملف ", el("bdi", { text: fileName }), " محمي بكلمة سر. أدخلها لفتحه — لا تُحفظ كلمة السر في أي مكان."),
+      retry ? el("p", { class: "t-hint t-hint-error", text: "كلمة السر غير صحيحة، حاول مرة أخرى." }) : null,
+      input);
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); const b = input.closest("dialog").querySelector(".btn-primary"); if (b) b.click(); } });
+    const ok = await dialog({ title: "ملف محمي بكلمة سر", body, actions: [{ label: "فتح", value: true, kind: "primary" }, { label: "إلغاء", value: false }] });
+    return ok ? input.value : null;
+  }
+
+  // يقرأ ملف Excel: عادي، أو محمي بكلمة سر (يُفك في المتصفح)، أو صيغة غير مدعومة برسالة واضحة.
+  async function readExcelSheets(fileName, bytes) {
+    const XC = T.core.xlsxCrypt;
+    const kind = XC.inspectOle(bytes).kind;
+    if (kind === "not-ole") return await T.core.xlsx.parseXlsx(bytes);
+    if (kind !== "encrypted-agile") return XC.decryptXlsx(bytes, ""); // يرمي رسالة الصيغة غير المدعومة
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const pw = await askPassword(fileName, attempt > 0);
+      if (pw == null) throw Object.assign(new Error("password cancelled"), { arMessage: "الملف محمي بكلمة سر ولم تُدخل — أزل الملف أو أعد إضافته لإدخالها." });
+      try {
+        return await T.core.xlsx.parseXlsx(XC.decryptXlsx(bytes, pw));
+      } catch (e) {
+        if (e.code !== "BADPASSWORD") throw e;
+      }
+    }
+    throw Object.assign(new Error("bad password"), { arMessage: "كلمة السر غير صحيحة بعد ثلاث محاولات." });
+  }
+
   async function readFile(f) {
     const item = { id: ++seq, name: f.name, size: f.size, profileId: "", userPicked: false, answers: {}, error: "" };
     const lower = f.name.toLowerCase();
     try {
-      if (/\.(xlsx|xlsm)$/.test(lower)) {
+      if (/\.(xlsx|xlsm|xls)$/.test(lower)) {
         const bytes = new Uint8Array(await f.arrayBuffer());
-        if (bytes[0] === 0xd0 && bytes[1] === 0xcf && bytes[2] === 0x11 && bytes[3] === 0xe0) {
-          item.error = "الملف محمي بكلمة سر أو بصيغة .xls القديمة — فتح الملفات المحمية سيُضاف قريبًا. مؤقتًا: افتحه في Excel واحفظه بصيغة .xlsx بدون كلمة سر.";
-          return item;
-        }
-        item.source = { fileName: f.name, sheets: await T.core.xlsx.parseXlsx(bytes) };
+        item.source = { fileName: f.name, sheets: await readExcelSheets(f.name, bytes) };
       } else if (/\.(csv|txt)$/.test(lower)) {
         item.text = (await T.core.csv.readFileSmart(f)).text;
         if (looksBatch(item.text)) item.batch = T.core.batchtxt.parseBatchTxt(item.text);
@@ -92,7 +118,7 @@
   }
 
   async function addFiles(list) {
-    const accepted = list.filter((f) => /\.(xlsx|xlsm|csv|txt)$/i.test(f.name));
+    const accepted = list.filter((f) => /\.(xlsx|xlsm|xls|csv|txt)$/i.test(f.name));
     if (accepted.length < list.length) toast(`تم تجاهل ${list.length - accepted.length} ملف بصيغة غير مدعومة`);
     for (const f of accepted) state.files.push(await readFile(f));
     state.result = null;
@@ -237,7 +263,7 @@
 
   /* ---------- التصيير ---------- */
 
-  const zone = dropzone({ title: "اسحب ملفات الموردين (Excel أو CSV أو TXT) وأفلتها هنا", accept: ".xlsx,.xlsm,.csv,.txt", folder: true, onFiles: addFiles });
+  const zone = dropzone({ title: "اسحب ملفات الموردين (Excel أو CSV أو TXT) وأفلتها هنا", accept: ".xlsx,.xlsm,.xls,.csv,.txt", folder: true, onFiles: addFiles });
 
   const DECISION = {
     auto: ["flag flag-ok", "تعرّف تلقائي"],

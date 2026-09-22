@@ -97,10 +97,31 @@ const check = (name, cond, extra) => {
   check("merge preview has workspace rows", (await evaluate("document.querySelectorAll('#previewTable tbody tr').length")) === 2);
   await evaluate("document.getElementById('clearBtn').click(); Tamim.app.workspace.clear(); true");
 
+  // ملف Excel محمي بكلمة سر: يُطلب الباسورد، ويُرفض الخاطئ، ويُفتح بالصحيح (الملف التجريبي: Tamim-123)
+  if (url.startsWith("http")) {
+    await evaluate("location.hash = '#/import'");
+    await sleep(300);
+    await evaluate(`(async () => { const clear = [...document.querySelectorAll('#importRoot button')].find(b => b.textContent.includes('مسح الكل')); if (clear) clear.click();
+      const buf = await (await fetch('tests/fixtures/encrypted-agile.xlsx')).arrayBuffer();
+      window.__enc = Tamim.tools.import.addFiles([new File([buf], "مورد-محمي.xlsx")]); return true; })()`);
+    await sleep(700);
+    check("protected file asks for a password", await evaluate("!!document.querySelector('dialog[open] input[type=password]')"));
+    await evaluate("(() => { const d = document.querySelector('dialog[open]'); d.querySelector('input').value = 'خطأ'; d.querySelector('.btn-primary').click(); return true; })()");
+    await sleep(900);
+    check("wrong password asks again", await evaluate("!!document.querySelector('dialog[open] .t-hint-error')"));
+    await evaluate("(() => { const d = document.querySelector('dialog[open]'); d.querySelector('input').value = 'Tamim-123'; d.querySelector('.btn-primary').click(); return true; })()");
+    await sleep(1200);
+    await evaluate("window.__enc.then(() => true)");
+    await sleep(400);
+    check("protected file opened after correct password", await evaluate("!document.querySelector('#importRoot .t-file-error') && document.querySelectorAll('#importRoot .t-file-card').length === 1"));
+    await evaluate("const clear = [...document.querySelectorAll('#importRoot button')].find(b => b.textContent.includes('مسح الكل')); if (clear) clear.click(); true");
+    await sleep(300);
+  }
+
   // معالج شركة جديدة: ملف بعناوين غير معروفة ← المعالج ← ملف إعداد جديد مختار تلقائيًا
   await evaluate("location.hash = '#/import'");
   await sleep(300);
-  await evaluate(`(async () => { [...document.querySelectorAll('#importRoot button')].find(b => b.textContent.includes('مسح الكل')).click();
+  await evaluate(`(async () => { const clear = [...document.querySelectorAll('#importRoot button')].find(b => b.textContent.includes('مسح الكل')); if (clear) clear.click();
     await Tamim.tools.import.addFiles([new File(["الرقم السري,رقم التسلسل,الفئة\\n5550001,8880001,10 LYD\\n5550002,8880002,10 LYD\\n"], "مورد-جديد.csv", { type: "text/csv" })]); return true; })()`);
   await sleep(500);
   check("unknown file offers the new-company wizard", await evaluate("!![...document.querySelectorAll('#importRoot button')].find(b => b.textContent.includes('شركة جديدة'))"));

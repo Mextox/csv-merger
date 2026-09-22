@@ -1,0 +1,35 @@
+{
+  "sectorSize": 512,
+  "streams": {
+    "\u0006DataSpaces/DataSpaceInfo/StrongEncryptionDataSpace": {
+      "mini": true,
+      "sha256": "167181108f6fd083cd67d569e9906a592ca923bc2d4c571ed1242caf92ed48f8",
+      "size": 64
+    },
+    "\u0006DataSpaces/DataSpaceMap": {
+      "mini": true,
+      "sha256": "b520d7662070c97304b0bbff09af9f61baaa6872976663ed1a886abc7c29cb15",
+      "size": 112
+    },
+    "\u0006DataSpaces/TransformInfo/StrongEncryptionTransform/\u0006Primary": {
+      "mini": true,
+      "sha256": "990349482cd707ba3093d6fff5bb72167a38f0831e58789a92c25cdeb01f7f93",
+      "size": 200
+    },
+    "\u0006DataSpaces/Version": {
+      "mini": true,
+      "sha256": "e81d2d7f4d8b4aa96a9d1ac9aad489caa06f24c3de2b66471479daf34672ce3a",
+      "size": 76
+    },
+    "EncryptedPackage": {
+      "mini": false,
+      "sha256": "64d94026e1525d5181d99d3d1b8930d3a51b2d2578bc761562c8ef61abd0bddd",
+      "size": 4968
+    },
+    "EncryptionInfo": {
+      "mini": true,
+      "sha256": "4f72798693a7766f6f205af32bee43ec056dd2dc8f49dfcce8734d96c4b6abaf",
+      "size": 1441
+    }
+  }
+}
