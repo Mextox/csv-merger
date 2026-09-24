@@ -28,6 +28,16 @@ check("version.js loads first", scripts[0] === "js/app/version.js", scripts);
 check("tools load after core", scripts.indexOf("js/tools/merge.js") > pos[pos.length - 1], scripts);
 check("shell loads last", scripts[scripts.length - 1] === "js/app/shell.js", scripts);
 
+// كل رابط في الشريط الجانبي له صفحة، وكل صفحة لها رابط، وكل صفحة فارغة لها ملف أداة يملؤها
+const routes = [...html.matchAll(/data-route="([^"]+)"/g)].map((m) => m[1]);
+const views = [...html.matchAll(/data-view="([^"]+)"/g)].map((m) => m[1]);
+routes.forEach((r) => check(`route has a view: ${r}`, views.includes(r)));
+views.forEach((v) => check(`view has a nav link: ${v}`, routes.includes(v)));
+check("no duplicate routes", new Set(routes).size === routes.length, routes);
+const toolsSrc = scripts.filter((s) => s.startsWith("js/tools/")).map((s) => fs.readFileSync(path.join(root, s), "utf8")).join("\n");
+[...html.matchAll(/<main class="container" id="([^"]+)"><\/main>/g)].map((m) => m[1])
+  .forEach((id) => check(`a tool fills #${id}`, toolsSrc.includes(`"${id}"`)));
+
 const swPath = path.join(root, "sw.js");
 const sw = fs.existsSync(swPath) ? fs.readFileSync(swPath, "utf8") : "";
 const assetsBlock = sw.match(/const ASSETS = \[([\s\S]*?)\];/);

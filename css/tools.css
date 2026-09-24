@@ -75,3 +75,40 @@
 .t-toast-ok { background: var(--ok); }
 .t-toast-error { background: var(--error); }
 .t-toast-hide { opacity: 0; }
+
+/* ===== صفحة المهمة: عنوان + خطوات مرقّمة ===== */
+.t-task-head { margin: 4px 0 18px; }
+.t-task-title { margin: 0; font-size: 1.45rem; }
+.t-old-name {
+  display: inline-block; margin-top: 6px; padding: 3px 10px; border-radius: 999px;
+  background: var(--primary-soft); color: var(--primary); font-size: .8rem; font-weight: 700;
+}
+.t-task-intro { color: var(--muted); margin: 8px 0 0; max-width: 70ch; line-height: 1.7; }
+
+.t-step { position: relative; }
+.t-step .card-head h2 { display: flex; align-items: center; gap: 10px; font-size: 1.05rem; }
+.t-step-num {
+  display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%;
+  background: var(--primary); color: #fff; font-size: .9rem; font-weight: 700; flex: none;
+}
+.t-step-note { color: var(--muted); font-size: .85rem; font-weight: 600; }
+.t-step-done .t-step-num { background: var(--ok); }
+.t-step-waiting { opacity: .55; }
+.t-step-waiting .t-step-num { background: var(--border); color: var(--muted); }
+
+.t-summary { margin: 0 0 14px; padding-inline-start: 20px; line-height: 1.9; }
+.t-summary li { color: var(--text); }
+.t-out-title { margin: 14px 0 8px; font-size: .95rem; }
+.t-step-result .t-hint { margin-top: 10px; }
+.btn-big { font-size: 1rem; padding: 12px 22px; }
+
+/* الرئيسية: مجموعات المهام */
+.home-group { margin: 24px 0 10px; font-size: 1rem; color: var(--primary); border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+.tool-card .t-old-name { margin-top: 8px; background: #f1f5f9; color: var(--muted); }
+
+/* الشريط الجانبي: عناوين المجموعات واسم البرنامج القديم */
+.nav-group {
+  display: block; margin: 14px 12px 4px; font-size: .72rem; font-weight: 700;
+  letter-spacing: .04em; color: rgba(255, 255, 255, .5); text-transform: uppercase;
+}
+.nav-old { margin-inline-start: auto; font-size: .7rem; opacity: .55; direction: ltr; }

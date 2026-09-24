@@ -1017,7 +1017,7 @@ if (typeof document !== "undefined") {
       const boxes = items.map((ds) => ({ ds, cb: el("input", { type: "checkbox", checked: true }) }));
       dialog({
         title: "إضافة من سلة العمل",
-        body: el("div", {}, boxes.map(({ ds, cb }) => el("label", { class: "opt opt-check t-ws-pick" }, cb, " ", el("bdi", { text: ds.name }), ` — ${ds.rows.length} صف`))),
+        body: el("div", {}, boxes.map(({ ds, cb }) => el("label", { class: "opt opt-check t-ws-pick" }, cb, " ", el("bdi", { dir: "ltr", text: ds.name }), ` — ${ds.rows.length} صف`))),
         actions: [{ label: "إضافة", value: true, kind: "primary" }, { label: "إلغاء", value: false }],
       }).then((ok) => { if (ok) boxes.filter((b) => b.cb.checked).forEach((b) => addDataset(b.ds)); });
     });

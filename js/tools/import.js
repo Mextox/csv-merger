@@ -289,7 +289,7 @@
   function fileCard(item) {
     const remove = el("button", { class: "file-remove", title: "إزالة الملف", text: "✕", onclick: () => { state.files = state.files.filter((x) => x !== item); state.result = null; render(); } });
     const head = el("div", { class: "file-info" },
-      el("div", { class: "file-name" }, el("bdi", { text: item.name })),
+      el("div", { class: "file-name" }, el("bdi", { dir: "ltr", text: item.name })),
       el("div", { class: "file-meta" }, el("span", { text: formatSize(item.size) }),
         item.batch ? el("span", { text: `ملف Batch · ${item.batch.rows.length} كرت` }) : null,
         item.source ? el("span", { text: `Excel · ${item.source.sheets.length} ورقة` }) : null));
@@ -347,7 +347,7 @@
           el("thead", {}, el("tr", {}, ["كود الشركة", "كود الفئة", "عدد الكروت", "الملف الناتج"].map((h) => el("th", { text: h })))),
           el("tbody", {}, r.files.map((f) => el("tr", {},
             el("td", { dir: "ltr", text: f.company }), el("td", { dir: "ltr", text: f.category || "—" }),
-            el("td", { text: String(f.rows) }), el("td", {}, el("bdi", { text: f.path }))))))),
+            el("td", { text: String(f.rows) }), el("td", {}, el("bdi", { dir: "ltr", text: f.path }))))))),
         el("p", { class: r.reconcile.ok ? "t-reconcile ok" : "t-reconcile bad", text: r.reconcile.message }),
         blocked ? el("p", { class: "t-hint t-hint-error", text: "لا يمكن التنزيل قبل تصحيح الأخطاء أعلاه." }) : null,
         !blocked && warnings > 0 ? el("label", { class: "opt opt-check t-ack" },

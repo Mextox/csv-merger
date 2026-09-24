@@ -9,9 +9,9 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="css/base.css?v=12">
-<link rel="stylesheet" href="css/shell.css?v=12">
-<link rel="stylesheet" href="css/tools.css?v=12">
+<link rel="stylesheet" href="css/base.css?v=13">
+<link rel="stylesheet" href="css/shell.css?v=13">
+<link rel="stylesheet" href="css/tools.css?v=13">
 </head>
 <body>
 <div class="app">
@@ -22,10 +22,23 @@
     </div>
     <nav class="nav">
       <a href="#/home" data-route="home"><span class="nav-icon">🏠</span><span class="nav-label">الرئيسية</span></a>
-      <a href="#/import" data-route="import"><span class="nav-icon">📥</span><span class="nav-label">استيراد كروت المورد</span></a>
-      <a href="#/split" data-route="split"><span class="nav-icon">✂️</span><span class="nav-label">التقسيم والتصدير</span></a>
-      <a href="#/merge" data-route="merge"><span class="nav-icon">🧩</span><span class="nav-label">الدمج والتقسيم</span></a>
-      <a href="#/serials" data-route="serials"><span class="nav-icon">🔢</span><span class="nav-label">أدوات السيريال</span></a>
+
+      <span class="nav-group">كروت الموردين</span>
+      <a href="#/import" data-route="import"><span class="nav-icon">📥</span><span class="nav-label">استيراد كروت مورد</span></a>
+      <a href="#/pull" data-route="pull"><span class="nav-icon">📤</span><span class="nav-label">سحب كمية بقالب</span><span class="nav-old">DOJON</span></a>
+      <a href="#/take" data-route="take"><span class="nav-icon">✂️</span><span class="nav-label">أخذ كروت وتقسيمها</span><span class="nav-old">M_L</span></a>
+      <a href="#/append" data-route="append"><span class="nav-icon">➕</span><span class="nav-label">إضافة نص لكل سطر</span><span class="nav-old">Extintion</span></a>
+
+      <span class="nav-group">السيريال والأكواد</span>
+      <a href="#/gen" data-route="gen"><span class="nav-icon">🎲</span><span class="nav-label">توليد أكواد سرية</span><span class="nav-old">GEN</span></a>
+      <a href="#/serial-add" data-route="serial-add"><span class="nav-icon">🔖</span><span class="nav-label">إضافة سيريال لملف أكواد</span><span class="nav-old">SIRIAL</span></a>
+      <a href="#/extract" data-route="extract"><span class="nav-icon">📑</span><span class="nav-label">استخراج عمود</span><span class="nav-old">EXPORT_SN</span></a>
+      <a href="#/len" data-route="len"><span class="nav-icon">📏</span><span class="nav-label">فلترة حسب طول الرقم</span><span class="nav-old">LenFilter</span></a>
+      <a href="#/match" data-route="match"><span class="nav-icon">🔀</span><span class="nav-label">المطابقة</span><span class="nav-old">MatchFind</span></a>
+      <a href="#/find" data-route="find"><span class="nav-icon">🔍</span><span class="nav-label">البحث عن سيريالات</span><span class="nav-old">serial-sarch</span></a>
+
+      <span class="nav-group">أدوات عامة</span>
+      <a href="#/merge" data-route="merge"><span class="nav-icon">🧩</span><span class="nav-label">الدمج والتوزيع</span></a>
       <a href="#/settings" data-route="settings"><span class="nav-icon">⚙️</span><span class="nav-label">الإعدادات</span></a>
     </nav>
     <div class="side-foot">🔒 كل المعالجة داخل متصفحك — لا يُرفع أي ملف</div>
@@ -57,8 +70,16 @@
       <main class="container" id="importRoot"></main>
     </section>
 
-    <section class="view" data-view="split" hidden>
-      <main class="container" id="splitRoot"></main>
+    <section class="view" data-view="pull" hidden>
+      <main class="container" id="pullRoot"></main>
+    </section>
+
+    <section class="view" data-view="take" hidden>
+      <main class="container" id="takeRoot"></main>
+    </section>
+
+    <section class="view" data-view="append" hidden>
+      <main class="container" id="appendRoot"></main>
     </section>
 
     <section class="view" data-view="merge" hidden>
@@ -157,8 +178,28 @@
       </main>
     </section>
 
-    <section class="view" data-view="serials" hidden>
-      <main class="container" id="serialsRoot"></main>
+    <section class="view" data-view="gen" hidden>
+      <main class="container" id="genRoot"></main>
+    </section>
+
+    <section class="view" data-view="serial-add" hidden>
+      <main class="container" id="serialAddRoot"></main>
+    </section>
+
+    <section class="view" data-view="extract" hidden>
+      <main class="container" id="extractRoot"></main>
+    </section>
+
+    <section class="view" data-view="len" hidden>
+      <main class="container" id="lenRoot"></main>
+    </section>
+
+    <section class="view" data-view="match" hidden>
+      <main class="container" id="matchRoot"></main>
+    </section>
+
+    <section class="view" data-view="find" hidden>
+      <main class="container" id="findRoot"></main>
     </section>
 
     <section class="view" data-view="settings" hidden>
@@ -174,32 +215,36 @@
   </div>
 </div>
 
-<script src="js/app/version.js?v=12"></script>
-<script src="js/core/text.js?v=12"></script>
-<script src="js/core/csv.js?v=12"></script>
-<script src="js/core/merge.js?v=12"></script>
-<script src="js/core/zip.js?v=12"></script>
-<script src="js/core/xlsx.js?v=12"></script>
-<script src="js/core/ole.js?v=12"></script>
-<script src="js/core/crypto.js?v=12"></script>
-<script src="js/core/xlsx-crypt.js?v=12"></script>
-<script src="js/core/batchtxt.js?v=12"></script>
-<script src="js/core/split.js?v=12"></script>
-<script src="js/core/serials.js?v=12"></script>
-<script src="js/core/profiles.js?v=12"></script>
-<script src="js/core/cards.js?v=12"></script>
-<script src="js/core/settings-pack.js?v=12"></script>
-<script src="js/app/store.js?v=12"></script>
-<script src="js/app/workspace.js?v=12"></script>
-<script src="js/app/ui.js?v=12"></script>
-<script src="js/tools/home.js?v=12"></script>
-<script src="js/tools/wizard.js?v=12"></script>
-<script src="js/tools/import.js?v=12"></script>
-<script src="js/tools/split.js?v=12"></script>
-<script src="js/tools/merge.js?v=12"></script>
-<script src="js/tools/serials.js?v=12"></script>
-<script src="js/tools/settings.js?v=12"></script>
-<script src="js/app/pwa.js?v=12"></script>
-<script src="js/app/shell.js?v=12"></script>
+<script src="js/app/version.js?v=13"></script>
+<script src="js/core/text.js?v=13"></script>
+<script src="js/core/csv.js?v=13"></script>
+<script src="js/core/merge.js?v=13"></script>
+<script src="js/core/zip.js?v=13"></script>
+<script src="js/core/xlsx.js?v=13"></script>
+<script src="js/core/ole.js?v=13"></script>
+<script src="js/core/crypto.js?v=13"></script>
+<script src="js/core/xlsx-crypt.js?v=13"></script>
+<script src="js/core/batchtxt.js?v=13"></script>
+<script src="js/core/split.js?v=13"></script>
+<script src="js/core/serials.js?v=13"></script>
+<script src="js/core/profiles.js?v=13"></script>
+<script src="js/core/cards.js?v=13"></script>
+<script src="js/core/settings-pack.js?v=13"></script>
+<script src="js/app/store.js?v=13"></script>
+<script src="js/app/workspace.js?v=13"></script>
+<script src="js/app/ui.js?v=13"></script>
+<script src="js/app/taskpage.js?v=13"></script>
+<script src="js/tools/home.js?v=13"></script>
+<script src="js/tools/wizard.js?v=13"></script>
+<script src="js/tools/import.js?v=13"></script>
+<script src="js/tools/pull.js?v=13"></script>
+<script src="js/tools/take.js?v=13"></script>
+<script src="js/tools/append.js?v=13"></script>
+<script src="js/tools/merge.js?v=13"></script>
+<script src="js/tools/gen.js?v=13"></script>
+<script src="js/tools/serial-tools.js?v=13"></script>
+<script src="js/tools/settings.js?v=13"></script>
+<script src="js/app/pwa.js?v=13"></script>
+<script src="js/app/shell.js?v=13"></script>
 </body>
 </html>

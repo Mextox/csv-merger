@@ -6,7 +6,7 @@
   background: linear-gradient(180deg, #1e1b4b, #312e81);
   color: #e0e7ff;
   padding: 20px 14px;
-  position: sticky; top: 0; height: 100vh;
+  position: sticky; top: 0; height: 100vh; overflow-y: auto;
   display: flex; flex-direction: column; gap: 18px;
 }
 .side-brand { display: flex; align-items: center; gap: 10px; padding: 0 6px; }
@@ -17,8 +17,8 @@
 .nav { display: flex; flex-direction: column; gap: 4px; }
 .nav a {
   display: flex; align-items: center; gap: 10px;
-  padding: 10px 12px; border-radius: 10px;
-  color: #c7d2fe; text-decoration: none; font-weight: 600;
+  padding: 8px 12px; border-radius: 10px;
+  color: #c7d2fe; text-decoration: none; font-weight: 600; font-size: .9rem;
 }
 .nav a:hover { background: rgba(255, 255, 255, .08); color: #fff; }
 .nav a.active { background: #fff; color: #312e81; }

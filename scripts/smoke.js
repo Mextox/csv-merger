@@ -153,49 +153,86 @@ const check = (name, cond, extra) => {
     await Tamim.app.store.put("templates", { id: "tpl-codes", kind: "codes", name: "ليبيانا", code: "10", categories: [{ name: "فئة 5", code: "5" }] });
     await Tamim.app.store.put("templates", { id: "tpl-batch", kind: "batch", name: "قالب 5", code: "5", start: "Batch:1\\n[BEGIN]", end: "[END]" });
     return true; })()`);
-  await evaluate("location.hash = '#/split'");
-  await sleep(600);
-  check("split tool renders three sections", (await evaluate("document.querySelectorAll('#splitRoot section.card').length")) === 3);
-  await evaluate(`(async () => {
-    const text = ["p1,s1,10,5", "p2,s2,10,5", "p3,s3,10,5", "p4,s4,10,5", "p5,s5,10,5"].join("\\n");
-    const zone = document.querySelector('#splitRoot .dropzone input[type=file]');
-    const dt = new DataTransfer(); dt.items.add(new File([text], "cards.csv", { type: "text/csv" }));
-    zone.files = dt.files; zone.dispatchEvent(new Event("change"));
-    return true; })()`);
-  await sleep(700);
-  check("split tool loaded the file", (await evaluate("document.querySelectorAll('#splitRoot .t-file-card').length")) >= 1);
-  await evaluate(`(() => { const inputs = document.querySelectorAll('#splitRoot .t-grid input[inputmode=numeric]');
-    const set = (el, v) => { el.value = v; el.dispatchEvent(new Event('input')); };
-    set(inputs[0], "3"); set(inputs[1], "2"); // آخر 3 أسطر، تقسيم كل 2
-    [...document.querySelectorAll('#splitRoot button')].find(b => b.textContent === 'معاينة').click(); return true; })()`);
-  await sleep(600);
-  check("split preview shows 2 output files from last 3 lines", (await evaluate("document.querySelectorAll('#splitRoot .t-result tbody tr').length")) === 2);
-  check("split reports remaining lines", await evaluate("[...document.querySelectorAll('#splitRoot .stat')].some(s => s.textContent.includes('سطر متبقٍ'))"));
+  const dropInto = async (root, name, text) => {
+    await evaluate(`(() => { const input = document.querySelector('${root} input[type=file]');
+      const dt = new DataTransfer(); dt.items.add(new File([${JSON.stringify(text)}], ${JSON.stringify(name)}, { type: "text/csv" }));
+      input.files = dt.files; input.dispatchEvent(new Event("change")); return true; })()`);
+    await sleep(700);
+  };
+  const cardsCsv = ["p1,s1,10,5", "p2,s2,10,5", "p3,s3,10,5", "p4,s4,10,5", "p5,s5,10,5"].join("\n");
+  const runStep = (root) => evaluate(`(() => { const b = [...document.querySelectorAll('${root} .btn-big')].find(x => !x.disabled); if (!b) return false; b.click(); return true; })()`);
 
-  // أدوات السيريال: توليد أكواد (ويُحفظ سجلها)، واستخراج عمود، والبحث عن سيريال داخل ملف
-  await evaluate("location.hash = '#/serials'");
+  // DOJON: سحب كمية بقالب المورد — خطوات مرقّمة، وكمية لكل ملف، وجدول يشرح كل ملف ناتج
+  await evaluate("location.hash = '#/pull'");
   await sleep(600);
-  check("serial tools render six sections", (await evaluate("document.querySelectorAll('#serialsRoot section.card').length")) === 6);
-  await evaluate(`(() => { const card = document.querySelectorAll('#serialsRoot section.card')[0];
+  check("DOJON page shows numbered steps", (await evaluate("document.querySelectorAll('#pullRoot .t-step').length")) === 2);
+  check("DOJON page names the old program", await evaluate("document.querySelector('#pullRoot .t-old-name').textContent.includes('DOJON')"));
+  await dropInto("#pullRoot", "cards.csv", cardsCsv);
+  check("DOJON found the export template from the file", await evaluate("document.querySelector('#pullRoot .file-meta').textContent.includes('قالب 5')"));
+  check("DOJON says why it cannot run yet", await evaluate("document.querySelector('#pullRoot .t-hint').textContent.includes('الكمية')"));
+  await evaluate(`(() => { const q = document.querySelector('#pullRoot .t-ask input');
+    q.value = "3"; q.dispatchEvent(new Event('input')); return true; })()`);
+  await sleep(300);
+  check("DOJON enabled the action after the quantity", await evaluate("!document.querySelector('#pullRoot .btn-big').disabled"));
+  check("«إضافة ملفات أخرى» opens the file picker, not a folder picker", (await evaluate(`(() => { let hit = "none";
+    document.querySelectorAll('#pullRoot input[type=file]').forEach((i) => i.addEventListener('click', (e) => { hit = i.hasAttribute('webkitdirectory') ? 'folder' : 'files'; e.preventDefault(); }, true));
+    [...document.querySelectorAll('#pullRoot button')].find((b) => b.textContent.includes('إضافة ملفات أخرى')).click(); return hit; })()`)) === "files");
+  await runStep("#pullRoot");
+  await sleep(600);
+  check("DOJON lists both output files", (await evaluate("document.querySelectorAll('#pullRoot .t-step-result tbody tr').length")) === 2);
+  check("DOJON explains the export file", await evaluate("document.querySelector('#pullRoot .t-step-result').textContent.includes('export/cards_1.csv')"));
+  check("DOJON explains the remaining file", await evaluate("document.querySelector('#pullRoot .t-step-result').textContent.includes('ضعه مكان الملف القديم')"));
+
+  // M_L: أخذ كروت وتقسيمها — التمبلت يُكتشف من الملف نفسه
+  await evaluate("location.hash = '#/take'");
+  await sleep(600);
+  await dropInto("#takeRoot", "cards.csv", cardsCsv);
+  check("M_L auto-detected the codes template", await evaluate("[...document.querySelectorAll('#takeRoot select')].some(s => s.selectedOptions[0].textContent.includes('ليبيانا'))"));
+  check("M_L auto-detected the category", await evaluate("[...document.querySelectorAll('#takeRoot select')].some(s => s.selectedOptions[0].textContent.includes('فئة 5'))"));
+  await evaluate(`(() => { const inputs = document.querySelectorAll('#takeRoot .t-grid input[inputmode=numeric]');
     const set = (el, v) => { el.value = v; el.dispatchEvent(new Event('input')); };
-    const inputs = card.querySelectorAll('input[type=text]');
-    set(inputs[0], "8"); set(inputs[1], "5"); set(inputs[2], "77");
-    [...card.querySelectorAll('button')].find(b => b.textContent === 'توليد').click(); return true; })()`);
+    set(inputs[0], "3"); set(inputs[1], "2"); return true; })()`); // آخر 3 أسطر، تقسيم كل 2
+  await sleep(300);
+  await runStep("#takeRoot");
+  await sleep(600);
+  check("M_L produced 2 parts + remaining", (await evaluate("document.querySelectorAll('#takeRoot .t-step-result tbody tr').length")) === 3);
+  check("M_L summary says what was taken", await evaluate("document.querySelector('#takeRoot .t-summary').textContent.includes('أُخذ 3')"));
+
+  // GEN: توليد أكواد ويُحفظ سجلها كبصمات فقط
+  await evaluate("location.hash = '#/gen'");
+  await sleep(600);
+  await evaluate(`(() => { const set = (el, v) => { el.value = v; el.dispatchEvent(new Event('input')); };
+    const inputs = document.querySelectorAll('#genRoot .t-grid input[type=text]');
+    set(inputs[0], "5"); set(inputs[1], "8"); set(inputs[2], "77"); return true; })()`);
+  await sleep(300);
+  await runStep("#genRoot");
   await sleep(700);
-  check("codes generated with serials", (await evaluate("document.querySelectorAll('#serialsRoot .t-result tbody tr').length")) === 5);
-  check("generated codes have the right shape", await evaluate("/^\\d{8}$/.test(document.querySelector('#serialsRoot .t-result tbody td').textContent)"));
-  await evaluate("[...document.querySelectorAll('#serialsRoot button')].find(b => b.textContent.includes('حفظ في السجل')).click(); true");
+  check("codes generated with serials", (await evaluate("document.querySelectorAll('#genRoot .t-step-result tbody tr').length")) === 5);
+  check("generated codes have the right shape", await evaluate("/^\\d{8}$/.test(document.querySelector('#genRoot .t-step-result tbody td').textContent)"));
+  check("GEN says what will be downloaded", await evaluate("document.querySelector('#genRoot .t-step-result').textContent.includes('ملف واحد سيُنزَّل')"));
+  await evaluate("[...document.querySelectorAll('#genRoot button')].find(b => b.textContent.includes('حفظ في السجل')).click(); true");
   await sleep(800);
   check("code history saved (hashes only)", (await evaluate("Tamim.app.store.all('codes').then(c => c.length)")) === 5);
   check("history stores no code text", await evaluate("Tamim.app.store.all('codes').then(c => c.every(x => /^[0-9a-f]{32}$/.test(x.id)))"));
-  await evaluate(`(async () => { const card = document.querySelectorAll('#serialsRoot section.card')[2];
-    const input = card.querySelector('.dropzone input[type=file]');
-    const dt = new DataTransfer(); dt.items.add(new File(["a1,b1,c1\\na2,b2,c2\\n"], "cols.csv", { type: "text/csv" }));
-    input.files = dt.files; input.dispatchEvent(new Event("change")); return true; })()`);
-  await sleep(700);
-  await evaluate("(() => { const card = document.querySelectorAll('#serialsRoot section.card')[2]; [...card.querySelectorAll('button')].find(b => b.textContent === 'معاينة').click(); return true; })()");
+
+  // EXPORT_SN: استخراج عمود
+  await evaluate("location.hash = '#/extract'");
+  await sleep(600);
+  await dropInto("#extractRoot", "cols.csv", "a1,b1,c1\na2,b2,c2\n");
+  await runStep("#extractRoot");
   await sleep(500);
-  check("column extraction result", await evaluate("[...document.querySelectorAll('#serialsRoot section.card')[2].querySelectorAll('tbody td')].map(t => t.textContent).join('|').includes('cols.csv')"));
+  check("column extraction result", await evaluate("document.querySelector('#extractRoot .t-step-result').textContent.includes('cols_serial.csv')"));
+  check("column extraction counts lines", await evaluate("[...document.querySelectorAll('#extractRoot .t-step-result tbody td')].some(t => t.textContent === '2')"));
+
+  // كل صفحة مهمة تفتح بعنوانها واسم البرنامج القديم وخطوة أولى جاهزة
+  for (const [route, rootId] of [["pull", "pullRoot"], ["take", "takeRoot"], ["append", "appendRoot"], ["serial-add", "serialAddRoot"],
+    ["extract", "extractRoot"], ["len", "lenRoot"], ["match", "matchRoot"], ["find", "findRoot"]]) {
+    await evaluate(`location.hash = '#/${route}'`);
+    await sleep(250);
+    check(`page #/${route} has a title, an old name and a first step`,
+      await evaluate(`(() => { const r = document.getElementById('${rootId}');
+        return !!r.querySelector('.t-task-title') && !!r.querySelector('.t-old-name') && !!r.querySelector('.t-step'); })()`));
+  }
 
   // معالج شركة جديدة: ملف بعناوين غير معروفة ← المعالج ← ملف إعداد جديد مختار تلقائيًا
   await evaluate("location.hash = '#/import'");
@@ -223,7 +260,7 @@ const check = (name, cond, extra) => {
   await evaluate("location.hash = '#/merge'");
   await sleep(300);
   check("merge view shown after navigation", await evaluate("!document.querySelector('[data-view=merge]').hidden && document.querySelector('[data-view=home]').hidden"));
-  check("title updated", (await evaluate("document.getElementById('viewTitle').textContent")) === "الدمج والتقسيم");
+  check("title updated", (await evaluate("document.getElementById('viewTitle').textContent")) === "الدمج والتوزيع");
   await evaluate("document.getElementById('demoBtn').click()");
   await sleep(800);
   const rows = await evaluate("document.querySelectorAll('#previewTable tbody tr').length");

@@ -45,8 +45,8 @@
   // منطقة إفلات بنفس تصميم أداة الدمج. opts: { title, accept, onFiles(files[]), folder: bool }
   function dropzone(opts) {
     const input = el("input", { type: "file", accept: opts.accept || "", multiple: true, hidden: true });
-    const folderInput = el("input", { type: "file", hidden: true });
-    folderInput.setAttribute("webkitdirectory", "");
+    const folderInput = opts.folder ? el("input", { type: "file", hidden: true }) : null;
+    if (folderInput) folderInput.setAttribute("webkitdirectory", "");
     const zone = el("section", { class: "dropzone", tabindex: "0", role: "button", "aria-label": opts.title },
       el("div", { class: "dz-icon", text: "📂" }),
       el("p", { class: "dz-title", text: opts.title }),
@@ -59,7 +59,7 @@
     zone.addEventListener("click", () => input.click());
     zone.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") input.click(); });
     input.addEventListener("change", () => { send(input.files); input.value = ""; });
-    folderInput.addEventListener("change", () => { send(folderInput.files); folderInput.value = ""; });
+    if (folderInput) folderInput.addEventListener("change", () => { send(folderInput.files); folderInput.value = ""; });
     ["dragenter", "dragover"].forEach((ev) => zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.add("dragover"); }));
     ["dragleave", "drop"].forEach((ev) => zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.remove("dragover"); }));
     zone.addEventListener("drop", (e) => send(e.dataTransfer.files));
